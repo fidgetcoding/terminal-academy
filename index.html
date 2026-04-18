@@ -1543,7 +1543,7 @@ const lessons = [
     desc: '<span class="highlight">jq</span> is a lightweight command-line JSON processor. It\'s like <span class="code">sed</span> for JSON data.\n\nBasic syntax:\n• <span class="code">jq \'.key\'</span> — extract a top-level key\n• <span class="code">jq \'.array[]\'</span> — iterate over array elements\n• <span class="code">jq \'.[] | .name\'</span> — extract a field from each element\n• <span class="code">jq \'select(.age > 30)\'</span> — filter elements\n• <span class="code">jq \'map(.name)\'</span> — transform each element\n• <span class="code">jq -r</span> — raw output (no quotes)\n\nPro patterns:\n• <span class="code">curl -s api | jq .</span> — pretty-print API response\n• <span class="code">cat data.json | jq \'.users[] | .email\'</span> — extract emails',
     tasks: [
       { text:'Pretty-print JSON: <code>cat documents/projects/data/config.json | jq .</code>', hint:'Type: cat file.json | jq . — formats JSON with colors and indentation', validate: c => c.cmd.includes('jq') && c.cmd.includes('.') },
-      { text:'Extract a key: <code>echo \'{"name":"Nathan","age":30}\' | jq \'.name\'</code>', hint:'Type the command to extract the "name" field from JSON', validate: c => c.cmd.includes('jq') && c.cmd.includes('.name') },
+      { text:'Extract a key: <code>echo \'{"name":"Nate","age":30}\' | jq \'.name\'</code>', hint:'Type the command to extract the "name" field from JSON', validate: c => c.cmd.includes('jq') && c.cmd.includes('.name') },
       { text:'Filter array elements: <code>jq select</code>', hint:'Type a jq command using select() to filter data', validate: c => c.cmd.includes('jq') && c.cmd.includes('select') },
       { text:'Use map to transform: <code>jq map</code>', hint:'Type a jq command using map() to transform array elements', validate: c => c.cmd.includes('jq') && c.cmd.includes('map') },
       { text:'Raw output mode: <code>echo \'{"msg":"hello"}\' | jq -r \'.msg\'</code>', hint:'The -r flag outputs raw strings without JSON quotes', validate: c => c.cmd.includes('jq') && c.cmd.includes('-r') },
@@ -4669,9 +4669,9 @@ function cmdDiff(args) {
 function cmdBash(args) {
   if (args[0] === 'examples') {
     const topic = args.slice(1).join(' ').toLowerCase();
-    if (topic.includes('if')) return `<span class="info">━━━ IF/ELIF/ELSE ━━━</span>\n\n<span class="dim">if [[ "$name" == "Nathan" ]]; then\n  echo "Hello Nathan!"\nelif [[ "$name" == "Admin" ]]; then\n  echo "Welcome, Admin."\nelse\n  echo "Who are you?"\nfi\n\n# Numeric comparison\nif [[ $count -gt 10 ]]; then\n  echo "More than 10"\nfi\n\n# File tests\nif [[ -f "$file" ]]; then\n  echo "File exists"\nelif [[ -d "$dir" ]]; then\n  echo "Directory exists"\nfi</span>`;
+    if (topic.includes('if')) return `<span class="info">━━━ IF/ELIF/ELSE ━━━</span>\n\n<span class="dim">if [[ "$name" == "Nathan" ]]; then\n  echo "Hello Nate!"\nelif [[ "$name" == "Admin" ]]; then\n  echo "Welcome, Admin."\nelse\n  echo "Who are you?"\nfi\n\n# Numeric comparison\nif [[ $count -gt 10 ]]; then\n  echo "More than 10"\nfi\n\n# File tests\nif [[ -f "$file" ]]; then\n  echo "File exists"\nelif [[ -d "$dir" ]]; then\n  echo "Directory exists"\nfi</span>`;
     if (topic.includes('case')) return `<span class="info">━━━ CASE STATEMENT ━━━</span>\n\n<span class="dim">case "$action" in\n  start)\n    echo "Starting..."\n    ;;\n  stop)\n    echo "Stopping..."\n    ;;\n  restart)\n    echo "Restarting..."\n    ;;\n  *)\n    echo "Usage: {start|stop|restart}"\n    exit 1\n    ;;\nesac</span>`;
-    if (topic.includes('function')) return `<span class="info">━━━ FUNCTIONS ━━━</span>\n\n<span class="dim">greet() {\n  local name="$1"\n  echo "Hello, $name!"\n  return 0\n}\n\n# Call it\ngreet "World"\n\n# With return value check\nif greet "Nathan"; then\n  echo "Greeting succeeded"\nfi\n\n# Capture output\nresult=$(greet "Nathan")\necho "Got: $result"</span>`;
+    if (topic.includes('function')) return `<span class="info">━━━ FUNCTIONS ━━━</span>\n\n<span class="dim">greet() {\n  local name="$1"\n  echo "Hello, $name!"\n  return 0\n}\n\n# Call it\ngreet "World"\n\n# With return value check\nif greet "Nate"; then\n  echo "Greeting succeeded"\nfi\n\n# Capture output\nresult=$(greet "Nate")\necho "Got: $result"</span>`;
     if (topic.includes('strict')) return `<span class="info">━━━ STRICT MODE ━━━</span>\n\n<span class="dim">#!/bin/bash\nset -euo pipefail\n\n# set -e    → exit on any error\n# set -u    → error on undefined variables\n# set -o pipefail → catch errors in pipes\n\n# This is the recommended header for all scripts.\n# Without it, scripts silently ignore errors!\n\n# Example of what -e catches:\nfalse  # This would silently pass without set -e\necho "This line never runs"\n\n# Example of what -u catches:\necho "$undefined_var"  # Error instead of empty string</span>`;
     if (topic.includes('error')) return `<span class="info">━━━ ERROR HANDLING ━━━</span>\n\n<span class="dim">#!/bin/bash\nset -euo pipefail\n\n# Trap errors\ntrap 'echo "Error on line $LINENO"; exit 1' ERR\n\n# Trap cleanup on exit\ncleanup() {\n  echo "Cleaning up temp files..."\n  rm -f /tmp/myapp_*\n}\ntrap cleanup EXIT\n\n# Custom error handling\nif ! command -v git &>/dev/null; then\n  echo "Error: git is not installed" >&2\n  exit 1\nfi</span>`;
     if (topic.includes('string')) return `<span class="info">━━━ STRING MANIPULATION ━━━</span>\n\n<span class="dim">name="Hello World"\n\n# Length\necho \${#name}          # 11\n\n# Substring\necho \${name:0:5}       # Hello\n\n# Replace\necho \${name/World/Bash} # Hello Bash\necho \${name//l/L}       # HeLLo WorLd\n\n# Trim prefix/suffix\nfile="document.tar.gz"\necho \${file%.gz}        # document.tar\necho \${file%%.*}        # document\necho \${file#*.}         # tar.gz\necho \${file##*.}        # gz</span>`;
@@ -5455,8 +5455,8 @@ function cmdSqlite3(args) {
 
 <span class="warning">SQL examples:</span>
   CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT);
-  INSERT INTO users VALUES (1, 'Nathan', 'nathan@example.com');
-  SELECT * FROM users WHERE name LIKE '%Nathan%';
+  INSERT INTO users VALUES (1, 'Nate', 'nate@example.com');
+  SELECT * FROM users WHERE name LIKE '%Nate%';
   SELECT COUNT(*) FROM users;
 
 <span class="dim">SQLite is embedded in: browsers, iOS, Android, Python, most apps.</span>`;
