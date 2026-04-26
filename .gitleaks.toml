@@ -24,3 +24,9 @@ regexes = [
   '\{\{(NOTION_TOKEN|GITHUB_TOKEN|MORGEN_API_KEY|NOTION_DATABASE_ID|W[123]_WORKFLOW_ID)\}\}',
   '\$\{?[A-Z_]+_(TOKEN|KEY|SECRET|PASSWORD)\}?',
 ]
+
+[[allowlists]]
+description = "Supabase ANON key — anon-by-design, RLS-protected, intentionally public client-side"
+regexes = [
+  'sb_publishable_lqtyf5uWjAqHQCxOr2LlXA_0vuRGalM',
+]
