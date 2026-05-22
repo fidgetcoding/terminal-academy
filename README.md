@@ -4,7 +4,7 @@ A gamified way to learn how to use the terminal. No experience needed.
 
 ## Play Now
 
-**[Launch Terminal Academy](https://lorecraft-io.github.io/terminal-academy/)**
+**[Launch Terminal Academy](https://fidgetcoding.github.io/terminal-academy/)**
 
 ## What You'll Learn
 
