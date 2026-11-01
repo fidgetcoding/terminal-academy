@@ -875,7 +875,7 @@ const lessons = [
       { text:'Copy a file: <code>cp documents/notes.txt documents/notes_backup.txt</code>', hint:'Type: cp documents/notes.txt documents/notes_backup.txt', validate: c => c.cmd.startsWith('cp ') && !c.cmd.includes('-r') },
       { text:'Rename a file with mv: <code>mv myfile.txt renamed.txt</code>', hint:'mv with a new name in the same directory = rename', validate: c => c.cmd.startsWith('mv ') },
       { text:'Delete the renamed file: <code>rm renamed.txt</code>', hint:'Type: rm renamed.txt', validate: c => c.cmd.startsWith('rm ') && !c.cmd.includes('-r') },
-      { text:'Delete a directory: <code>rm -r myproject</code>', hint:'Type: rm -r myproject — need -r for directories', validate: c => c.cmd.includes('rm -r') || c.cmd.includes('rm -rf') },
+      { text:'Delete a directory: <code>rm -r myproject</code>', hint:'Type: rm -r myproject — need -r for directories. This can\'t be undone, and rm -rf won\'t even ask, so check the path first.', validate: c => c.cmd.includes('rm -r') || c.cmd.includes('rm -rf') },
     ],
     xp: 70,
   },
@@ -1422,7 +1422,7 @@ const lessons = [
     desc: '<span class="highlight">curl</span> is the Swiss Army knife for HTTP requests. It speaks dozens of protocols and is essential for API work.\n\nHTTP methods:\n• <span class="code">curl URL</span> — GET request (default)\n• <span class="code">curl -X POST -d \'{"key":"val"}\' URL</span> — POST with data\n• <span class="code">curl -X PUT URL</span> — PUT request\n• <span class="code">curl -X DELETE URL</span> — DELETE request\n\nUseful flags:\n• <span class="code">-H "Content-Type: application/json"</span> — set headers\n• <span class="code">-o file</span> — save output to file\n• <span class="code">-s</span> — silent mode (no progress bar)\n• <span class="code">-L</span> — follow redirects\n• <span class="code">-b cookies.txt</span> — send cookies\n\nPro tip: <span class="code">curl -s URL | jq .</span> — pipe JSON responses to jq for pretty-printing!',
     tasks: [
       { text:'Make a POST request: <code>curl -X POST -d \'{"name":"test"}\' https://api.example.com</code>', hint:'Type: curl -X POST with -d for data — sends data to the server', validate: c => usesCmd(c, 'curl') && c.cmd.includes('POST') },
-      { text:'Add a custom header: <code>curl -H "Authorization: Bearer token" https://api.example.com</code>', hint:'Type: curl -H "Header: value" URL — adds a custom HTTP header', validate: c => usesCmd(c, 'curl') && c.cmd.includes('-H') },
+      { text:'Add a custom header: <code>curl -H "Authorization: Bearer token" https://api.example.com</code>', hint:'Type: curl -H "Header: value" URL — adds a custom HTTP header. A real token typed like this ends up in your shell history, so keep it in a variable or file instead.', validate: c => usesCmd(c, 'curl') && c.cmd.includes('-H') },
       { text:'Save output to a file: <code>curl -o page.html https://example.com</code>', hint:'Type: curl -o filename URL — saves the response to a file', validate: c => usesCmd(c, 'curl') && c.cmd.includes('-o') },
       { text:'Follow redirects: <code>curl -L https://example.com</code>', hint:'Type: curl -L URL — follows HTTP 301/302 redirects', validate: c => usesCmd(c, 'curl') && c.cmd.includes('-L') },
       { text:'Silent mode with jq: <code>curl -s https://api.example.com | jq .</code>', hint:'Type: curl -s URL | jq . — fetches JSON silently and pretty-prints it', validate: c => usesCmd(c, 'curl') && c.cmd.includes('-s') },
@@ -1698,7 +1698,7 @@ const lessons = [
       { text:'Dry run first: <code>rsync -avz --dry-run documents/ backup/</code>', hint:'Type: rsync --dry-run — shows what would be transferred', validate: c => usesCmd(c, 'rsync') && c.cmd.includes('--dry-run') },
       { text:'Exclude files: <code>rsync -avz --exclude "*.log" documents/ backup/</code>', hint:'Type: rsync --exclude "pattern" — skips matching files', validate: c => usesCmd(c, 'rsync') && c.cmd.includes('--exclude') },
       { text:'Sync to remote: <code>rsync -avz documents/ user@server:~/backup/</code>', hint:'Type: rsync -avz dir/ user@host:path/ — syncs via SSH', validate: c => usesCmd(c, 'rsync') && c.cmd.includes('@') },
-      { text:'Delete extra files: <code>rsync -avz --delete documents/ backup/</code>', hint:'Type: rsync --delete — removes files in dest that aren\'t in source', validate: c => usesCmd(c, 'rsync') && c.cmd.includes('--delete') },
+      { text:'Delete extra files: <code>rsync -avz --delete documents/ backup/</code>', hint:'Type: rsync -avz --delete documents/ backup/ — removes files in dest that aren\'t in source. On real files, do a --dry-run first: deleted files don\'t come back.', validate: c => usesCmd(c, 'rsync') && c.cmd.includes('--delete') },
     ],
     xp: 90,
   },
@@ -1709,7 +1709,7 @@ const lessons = [
     tasks: [
       { text:'Connect to a host: <code>nc example.com 80</code>', hint:'Type: nc host port — opens a TCP connection', validate: c => usesCmd(c, 'nc') && !c.cmd.includes('-l') && !c.cmd.includes('-z') },
       { text:'Listen for connections: <code>nc -l 8080</code>', hint:'Type: nc -l port — starts listening for incoming connections', validate: c => usesCmd(c, 'nc') && c.cmd.includes('-l') },
-      { text:'Scan ports: <code>nc -z example.com 1-100</code>', hint:'Type: nc -z host range — scans for open ports', validate: c => usesCmd(c, 'nc') && c.cmd.includes('-z') },
+      { text:'Scan ports: <code>nc -z example.com 1-100</code>', hint:'Type: nc -z host range — scans for open ports. Only scan hosts you own or have permission to test.', validate: c => usesCmd(c, 'nc') && c.cmd.includes('-z') },
       { text:'UDP mode: <code>nc -u example.com 53</code>', hint:'Type: nc -u host port — connects using UDP instead of TCP', validate: c => usesCmd(c, 'nc') && c.cmd.includes('-u') },
       { text:'Learn netcat patterns: <code>nc help</code>', hint:'Type: nc help — shows common netcat use cases', validate: c => c.cmd === 'nc help' || (usesCmd(c, 'nc') && c.cmd.includes('help')) },
     ],
@@ -4479,6 +4479,7 @@ function cmdClaude(args) {
 
 <span class="warning">Getting started:</span>
   curl -fsSL https://claude.ai/install.sh | bash
+  <span class="dim">(This runs a script from the internet. Read any script before you run it this way.)</span>
   cd your-project
   claude
 
@@ -6587,6 +6588,7 @@ Oh My Zsh is a framework for managing Zsh configuration.
 
 <span class="warning">Install:</span>
   sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+  <span class="dim">This runs a script from the internet. Read any script before you run it this way.</span>
 
 <span class="warning">Themes:</span> Set ZSH_THEME in ~/.zshrc
   Popular: robbyrussell, agnoster, powerlevel10k
