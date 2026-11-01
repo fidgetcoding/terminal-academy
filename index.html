@@ -77,25 +77,26 @@ body { background:var(--bg); color:var(--text); font-family:var(--font); height:
 #terminal .exec-color { color:var(--green); }
 #terminal .hidden-color { color:var(--dim); }
 #terminal .perm-color { color:var(--yellow); }
+#terminal .red-text { color:var(--red); }
 
 #input-line {
   display:flex; align-items:center; padding:8px 12px;
   background:#0d0d0d; border-top:1px solid var(--border); flex-shrink:0;
   position:relative;
 }
-#input-line .prompt { color:var(--green); white-space:pre; font-size:13px; }
+#input-line .prompt { color:var(--green); white-space:pre; font-size:13px; min-width:0; flex:0 1 auto; max-width:45%; overflow:hidden; text-overflow:ellipsis; }
 #input-line .input-wrapper {
-  flex:1; position:relative; display:flex; align-items:center;
+  flex:1 1 0; min-width:0; position:relative; display:flex; align-items:center;
 }
 #input-line input {
-  flex:1; background:transparent; border:none; color:transparent;
+  flex:1; min-width:0; width:100%; background:transparent; border:none; color:transparent;
   font-family:var(--font); font-size:13px; outline:none; caret-color:var(--green);
   position:relative; z-index:2;
 }
 #input-line .syntax-overlay {
   position:absolute; left:0; top:0; bottom:0; display:flex; align-items:center;
   font-family:var(--font); font-size:13px; pointer-events:none; z-index:1;
-  white-space:pre; overflow:hidden;
+  white-space:pre; overflow:hidden; right:0;
 }
 #input-line .syntax-overlay .cmd-valid { color:var(--green); text-shadow:0 0 6px rgba(0,255,136,.3); }
 #input-line .syntax-overlay .cmd-invalid { color:var(--red); text-shadow:0 0 6px rgba(255,56,96,.3); }
@@ -143,7 +144,8 @@ body { background:var(--bg); color:var(--text); font-family:var(--font); height:
 .task-check { font-size:14px; flex-shrink:0; margin-top:1px; }
 .task-item.done .task-check { color:var(--success); }
 .task-item:not(.done) .task-check { color:var(--dim); }
-.task-text { flex:1; }
+.task-text { flex:1; min-width:0; overflow-wrap:anywhere; }
+.task-text code { white-space:pre-wrap; }
 .hint-btn {
   background:transparent; border:1px solid var(--border); color:var(--yellow);
   padding:2px 8px; border-radius:3px; font-family:var(--font); font-size:10px;
@@ -321,17 +323,17 @@ body { background:var(--bg); color:var(--text); font-family:var(--font); height:
 /* Welcome overlay */
 #welcome-overlay {
   position:fixed; inset:0; background:rgba(0,0,0,.85); z-index:100;
-  display:flex; align-items:center; justify-content:center;
+  display:flex; align-items:center; justify-content:center; overflow-y:auto;
 }
 #welcome-overlay.hidden { display:none; }
 #welcome-box {
   background:var(--panel); border:1px solid var(--green); border-radius:12px;
-  padding:40px; max-width:600px; text-align:center;
+  padding:40px; max-width:600px; text-align:center; margin:auto;
 }
 #welcome-box h1 { color:var(--green); font-size:28px; margin-bottom:8px; }
 #welcome-box h1 span { color:var(--cyan); }
 #welcome-box .subtitle { color:var(--dim); font-size:14px; margin-bottom:24px; }
-#welcome-box .ascii-art { color:var(--green); font-size:11px; line-height:1.3; margin:16px 0; }
+#welcome-box .ascii-art { color:var(--green); font-size:11px; line-height:1.3; margin:16px 0; white-space:pre; text-align:left; display:inline-block; }
 #welcome-box p { color:#bbb; font-size:13px; line-height:1.7; margin-bottom:16px; }
 #welcome-box button {
   background:var(--green); color:#000; border:none; padding:12px 32px;
@@ -342,12 +344,12 @@ body { background:var(--bg); color:var(--text); font-family:var(--font); height:
 /* ===== AUTH / LOGIN ===== */
 #auth-overlay {
   position:fixed; inset:0; background:rgba(0,0,0,.92); z-index:110;
-  display:flex; align-items:center; justify-content:center;
+  display:flex; align-items:center; justify-content:center; overflow-y:auto;
 }
 #auth-overlay.hidden { display:none; }
 #auth-box {
   background:var(--panel); border:1px solid var(--border); border-radius:12px;
-  padding:32px; width:360px; max-width:90vw;
+  padding:32px; width:360px; max-width:90vw; margin:auto;
 }
 #auth-box h2 { color:var(--cyan); font-size:18px; margin-bottom:4px; text-align:center; }
 #auth-box .auth-subtitle { color:var(--dim); font-size:11px; text-align:center; margin-bottom:20px; }
@@ -426,11 +428,12 @@ body { background:var(--bg); color:var(--text); font-family:var(--font); height:
   /* Mobile: panel becomes a slide-up drawer */
   #side-panel {
     width:100%; border-left:none; border-top:2px solid var(--green);
-    max-height:55vh; min-height:180px;
+    flex:0 1 50dvh; max-height:50dvh; min-height:0;
     order:1;
   }
   #side-panel.hidden { display:none; }
-  #terminal-pane { flex:1; min-height:35vh; order:2; }
+  #terminal-pane { flex:1 1 0; min-height:150px; order:2; }
+  #input-line .prompt { max-width:38%; }
 
   .panel-tabs { overflow-x:auto; -webkit-overflow-scrolling:touch; flex-wrap:nowrap; }
   .panel-tabs button { padding:7px 6px; font-size:9px; white-space:nowrap; flex-shrink:0; min-width:auto; }
@@ -1100,7 +1103,7 @@ const lessons = [
   // CHAPTER 17: CLAUDE CODE POWER USER
   {
     chapter: 17, title: 'Claude Code Power User',
-    desc: '<span class="highlight">Claude Code</span> is Anthropic\'s official CLI for Claude — an AI coding assistant that lives in your terminal. It can read your codebase, make edits, run commands, and manage git workflows.\n\nUse the simulated <code>claude</code> command to explore its features. In the real world, you install it with <code>npm install -g @anthropic-ai/claude-code</code> and run <code>claude</code> to start.',
+    desc: '<span class="highlight">Claude Code</span> is Anthropic\'s official CLI for Claude — an AI coding assistant that lives in your terminal. It can read your codebase, make edits, run commands, and manage git workflows.\n\nUse the simulated <code>claude</code> command to explore its features. In the real world, you install it with <code>curl -fsSL https://claude.ai/install.sh | bash</code> (or <code>npm install -g @anthropic-ai/claude-code</code>) and run <code>claude</code> to start.',
     tasks: [
       { text:'Get an overview: <code>claude help</code>', hint:'Type: claude help — see what Claude Code can do', validate: c => c.cmd === 'claude help' },
       { text:'Learn slash commands: <code>claude slash</code>', hint:'Type: claude slash — slash commands are powerful shortcuts', validate: c => c.cmd === 'claude slash' },
@@ -1434,7 +1437,7 @@ const lessons = [
   // CHAPTER 43: SECURITY & ENCRYPTION
   {
     chapter: 43, title: 'Security & Encryption',
-    desc: 'Terminal tools for <span class="highlight">encrypting</span>, <span class="highlight">signing</span>, and <span class="highlight">verifying</span> data:\n\n• <span class="code">gpg -c file</span> — encrypt a file (symmetric, password-based)\n• <span class="code">gpg -d file.gpg</span> — decrypt a file\n• <span class="code">gpg --sign file</span> — digitally sign a file\n• <span class="code">sha256sum file</span> — compute SHA-256 hash\n• <span class="code">md5 file</span> — compute MD5 hash (less secure, still used for integrity)\n\nHashing is <span class="highlight">one-way</span> — you can verify a file hasn\'t been tampered with, but you can\'t reverse it.\n\nPassword generation: <span class="code">openssl rand -base64 32</span> generates a strong random password.',
+    desc: 'Terminal tools for <span class="highlight">encrypting</span>, <span class="highlight">signing</span>, and <span class="highlight">verifying</span> data:\n\n• <span class="code">gpg -c file</span> — encrypt a file (symmetric, password-based)\n• <span class="code">gpg -d file.gpg</span> — decrypt a file\n• <span class="code">gpg --sign file</span> — digitally sign a file\n• <span class="code">sha256sum file</span> — compute SHA-256 hash (older macOS: <span class="code">shasum -a 256 file</span>)\n• <span class="code">md5 file</span> — compute MD5 hash (less secure, still used for integrity)\n\nHashing is <span class="highlight">one-way</span> — you can verify a file hasn\'t been tampered with, but you can\'t reverse it.\n\nPassword generation: <span class="code">openssl rand -base64 32</span> generates a strong random password.',
     tasks: [
       { text:'Encrypt a file: <code>gpg -c documents/notes.txt</code>', hint:'Type: gpg -c documents/notes.txt — encrypts with a passphrase', validate: c => usesCmd(c, 'gpg') && c.cmd.includes('-c') },
       { text:'Decrypt a file: <code>gpg -d documents/notes.txt.gpg</code>', hint:'Type: gpg -d file.gpg — decrypts the file', validate: c => usesCmd(c, 'gpg') && c.cmd.includes('-d') },
@@ -1814,7 +1817,7 @@ const lessons = [
     tasks: [
       { text:'Check if a command is builtin: <code>type cd</code>', hint:'Type: type cd — shows "cd is a shell builtin"', validate: c => usesCmd(c, 'type') && !c.cmd.includes('file') },
       { text:'Find the external binary: <code>which ls</code>', hint:'Type: which ls — shows /bin/ls (the external program path)', validate: c => usesCmd(c, 'which') },
-      { text:'Compare type vs which: <code>type echo</code>', hint:'Type: type echo — tells you echo is a builtin, not /bin/echo', validate: c => usesCmd(c, 'type') && usesCmd(c, 'echo') },
+      { text:'Compare type vs which: <code>type echo</code>', hint:'Type: type echo — tells you echo is a builtin, not /bin/echo', validate: c => c.cmd === 'type echo' },
       { text:'List all shell builtins: <code>builtin help</code>', hint:'Type: builtin help — shows all available shell builtins', validate: c => usesCmd(c, 'builtin') },
     ],
     xp: 60,
@@ -1911,7 +1914,7 @@ const lessons = [
   // CHAPTER 80: HEX, BINARY & ENCODING
   {
     chapter: 80, title: 'Hex, Binary & Encoding',
-    desc: 'Peek inside binary files and convert between encodings:\n\n• <span class="code">xxd file</span> — hex dump (both hex and ASCII)\n• <span class="code">xxd -r</span> — reverse hex dump (convert back to binary)\n• <span class="code">hexdump -C file</span> — canonical hex+ASCII display\n• <span class="code">base64 file</span> — encode file as Base64\n• <span class="code">base64 -d encoded</span> — decode Base64\n• <span class="code">od -A x -t x1 file</span> — octal dump with hex output\n• <span class="code">file binary</span> — identify file type from magic bytes\n• <span class="code">iconv -f UTF-16 -t UTF-8 file</span> — convert encodings',
+    desc: 'Peek inside binary files and convert between encodings:\n\n• <span class="code">xxd file</span> — hex dump (both hex and ASCII)\n• <span class="code">xxd -r</span> — reverse hex dump (convert back to binary)\n• <span class="code">hexdump -C file</span> — canonical hex+ASCII display\n• <span class="code">base64 file</span> — encode file as Base64 (macOS: <span class="code">base64 -i file</span>)\n• <span class="code">base64 -d encoded</span> — decode Base64\n• <span class="code">od -A x -t x1 file</span> — octal dump with hex output\n• <span class="code">file binary</span> — identify file type from magic bytes\n• <span class="code">iconv -f UTF-16 -t UTF-8 file</span> — convert encodings',
     tasks: [
       { text:'Hex dump a file: <code>xxd documents/notes.txt</code>', hint:'Type: xxd file — shows hexadecimal representation', validate: c => usesCmd(c, 'xxd') && !c.cmd.includes('-r') },
       { text:'Base64 encode: <code>echo "hello" | base64</code>', hint:'Type: echo "text" | base64 — encodes text as Base64', validate: c => usesCmd(c, 'base64') && !c.cmd.includes('-d') && !c.cmd.includes('-D') },
@@ -2778,7 +2781,7 @@ function runCompound(text, stdin) {
 function runIf(body, shown) {
   // Find top-level then / elif / else, skipping any nested if ... fi
   const tokens = [];
-  const re = /(^|[\s;])(if|then|elif|else|fi)(?=[\s;]|$)/g;
+  const re = /(^\s*|[;\n]\s*|\b(?:then|else|do)\s+)(if|then|elif|else|fi)(?=[\s;]|$)/g;
   let m, depth = 0;
   while ((m = re.exec(body))) {
     const w = m[2];
@@ -3102,6 +3105,9 @@ function runCommand(cmd, args, stdin) {
     case 'last': return cmdLast();
     case 'gpg': return cmdGpg(args);
     case 'sha256sum': case 'md5': case 'md5sum': return cmdHash(args, cmd, stdin);
+    case 'shasum':
+      if (args[args.indexOf('-a') + 1] !== '256') return '<span class="dim">This simulator only does SHA-256: shasum -a 256 file</span>';
+      return cmdHash(args, 'sha256sum', stdin);
     case 'openssl': return cmdOpenssl(args);
     case 'ansi': return cmdAnsi(args);
     case 'tput': return cmdTput(args);
@@ -3907,7 +3913,7 @@ function cmdHead(args, stdin) {
     return (sources.length > 1 ? `==&gt; ${escapeHtml(s.name)} &lt;==\n` : '') + escapeHtml(body);
   });
   if (opts.c !== null) noTrailingNewline = true;
-  return [...errors, ...blocks].filter(Boolean).join('\n');
+  return [...errors, blocks.join('\n\n')].filter(Boolean).join('\n');
 }
 
 // --- tail ---
@@ -3923,7 +3929,7 @@ function cmdTail(args, stdin) {
     return (sources.length > 1 ? `==&gt; ${escapeHtml(s.name)} &lt;==\n` : '') + escapeHtml(body);
   });
   const note = opts.follow && sources.length ? '\n<span class="dim">(tail -f keeps watching for new lines until you press Ctrl+C. This simulated log has no new lines.)</span>' : '';
-  return [...errors, ...blocks].filter(Boolean).join('\n') + note;
+  return [...errors, blocks.join('\n\n')].filter(Boolean).join('\n') + note;
 }
 
 // --- wc ---
@@ -4562,7 +4568,7 @@ function cmdClaude(args) {
   • Explain complex code and architecture
 
 <span class="warning">Getting started:</span>
-  npm install -g @anthropic-ai/claude-code
+  curl -fsSL https://claude.ai/install.sh | bash
   cd your-project
   claude
 
@@ -4579,12 +4585,12 @@ function cmdClaude(args) {
   <span class="highlight">/help</span>          — show available commands and tips
   <span class="highlight">/compact</span>       — compress conversation context to free up tokens
   <span class="highlight">/clear</span>         — clear conversation and start fresh
-  <span class="highlight">/cost</span>          — show token usage and cost for this session
+  <span class="highlight">/usage</span>         — show session cost, plan limits, and activity (/cost is an alias)
   <span class="highlight">/doctor</span>        — diagnose Claude Code configuration issues
   <span class="highlight">/init</span>          — create a CLAUDE.md project memory file
-  <span class="highlight">/review</span>        — review a pull request
-  <span class="highlight">/terminal-setup</span> — install Shift+Enter keybinding for newlines
-  <span class="highlight">/vim</span>           — enable vim keybindings for the input field
+  <span class="highlight">/code-review</span>   — review your changes or a pull request for bugs (/review is an alias)
+  <span class="highlight">/terminal-setup</span> — install a Shift+Enter keybinding for terminals that lack one
+  <span class="highlight">/config</span>        — open settings, including vim editing mode
 
 <span class="dim">Tip: /compact is your best friend in long sessions — it summarizes the
 conversation so Claude stays fast and doesn\'t lose important context.</span>`
@@ -4615,53 +4621,55 @@ conversation so Claude stays fast and doesn\'t lose important context.</span>`
   • GitHub — manage issues, PRs, reviews
   • Postgres/SQLite — query databases
   • Slack — send messages
-  • Puppeteer — browser automation`
+  • Playwright — browser automation`
     },
     keybindings: {
       title: 'Claude Code — Keybindings',
       content: `<span class="warning">Inside Claude Code\'s prompt:</span>
   <span class="highlight">Enter</span>          — submit your message
-  <span class="highlight">Shift+Enter</span>    — new line (after /terminal-setup)
-  <span class="highlight">Ctrl+C</span>         — cancel current generation
+  <span class="highlight">Shift+Enter</span>    — new line (most terminals; otherwise run /terminal-setup)
+  <span class="highlight">Esc</span>            — stop Claude mid-response
+  <span class="highlight">Ctrl+C</span>         — interrupt, or clear the prompt
   <span class="highlight">Ctrl+C (twice)</span> — exit Claude Code
   <span class="highlight">Up/Down</span>        — cycle through message history
   <span class="highlight">Tab</span>            — accept autocomplete suggestion
-  <span class="highlight">Esc</span>            — dismiss autocomplete / cancel edit
+  <span class="highlight">Shift+Tab</span>      — cycle permission modes
 
-<span class="warning">During tool use:</span>
-  <span class="highlight">y</span>              — approve the pending tool call
-  <span class="highlight">n</span>              — reject the pending tool call
-  <span class="highlight">a</span>              — approve all tool calls for this session
+<span class="warning">When Claude asks permission to use a tool:</span>
+  Pick an option from the menu with the arrow keys and Enter:
+  allow once, allow from now on, or say no.
 
-<span class="dim">Run /terminal-setup to install the Shift+Enter keybinding
-for multi-line input in your terminal.</span>`
+<span class="dim">Run /terminal-setup if Shift+Enter doesn\'t make a new line
+in your terminal.</span>`
     },
     skills: {
       title: 'Claude Code — Skills',
       content: `<span class="highlight">Skills</span> are specialized capabilities that extend Claude Code.
 
 <span class="warning">What skills do:</span>
-  Skills are like pre-built recipes for common tasks. They combine
-  Claude\'s tools with domain-specific knowledge and workflows.
+  A skill is a SKILL.md file of instructions for a kind of task. Claude
+  uses one when it fits, or you run it by name with a slash.
 
 <span class="warning">Examples of skills:</span>
-  <span class="highlight">/commit</span>        — analyze changes and create a well-formatted git commit
-  <span class="highlight">/review-pr</span>     — review a pull request for issues and improvements
-  <span class="highlight">/pdf</span>           — read and analyze PDF documents
+  <span class="highlight">/code-review</span>   — check your changes for bugs
+  <span class="highlight">/simplify</span>      — clean up the code you just changed
+  <span class="highlight">/debug</span>         — turn on debug logging and work through a problem
 
 <span class="warning">How skills work:</span>
-  When you invoke a skill (e.g., type "/commit"), Claude loads a
-  specialized instruction set that guides it through the task step by
-  step — reading files, running commands, and producing output.
+  When you invoke a skill (e.g., type "/code-review"), Claude loads its
+  instructions and follows them — reading files, running commands, and
+  producing output.
 
-<span class="dim">Skills are defined in project config or installed via MCP servers.
-Think of them as "macros with intelligence."</span>`
+<span class="dim">Yours live in .claude/skills/&lt;name&gt;/SKILL.md (one project) or
+~/.claude/skills/&lt;name&gt;/SKILL.md (all projects). Plugins can add more.</span>`
     },
     hooks: {
       title: 'Claude Code — Hooks',
       content: `<span class="highlight">Hooks</span> are shell commands that run automatically at specific points in Claude\'s workflow.
 
-<span class="warning">Available hook events:</span>
+<span class="warning">Some of the hook events:</span>
+  <span class="highlight">SessionStart</span>   — runs when a session begins
+  <span class="highlight">UserPromptSubmit</span> — runs when you send a prompt
   <span class="highlight">PreToolUse</span>     — runs before Claude uses a tool (e.g., before editing a file)
   <span class="highlight">PostToolUse</span>    — runs after a tool completes
   <span class="highlight">Notification</span>   — runs when Claude sends a notification
@@ -4677,11 +4685,11 @@ Think of them as "macros with intelligence."</span>`
   "hooks": {
     "PostToolUse": [{
       "matcher": "Edit",
-      "hooks": [{ "command": "prettier --write $CLAUDE_FILE_PATH" }]
+      "hooks": [{ "type": "command", "command": "jq -r .tool_input.file_path | xargs prettier --write" }]
     }]
   }
 
-<span class="dim">Hooks let you integrate Claude into your existing dev workflow seamlessly.</span>`
+<span class="dim">A hook gets the details of the event as JSON on stdin, which is why jq is reading it above.</span>`
     },
   };
   const feat = features[sub];
@@ -4709,7 +4717,8 @@ function cmdWarp(args) {
 
 <span class="warning">Block navigation:</span>
   <span class="highlight">Cmd+Up/Down</span>   — jump between blocks
-  <span class="highlight">Cmd+Shift+C</span>   — copy current block\'s output
+  <span class="highlight">Cmd+Shift+C</span>   — copy the selected block\'s command
+  <span class="highlight">Cmd+Option+Shift+C</span> — copy the selected block\'s output
   <span class="highlight">Click</span>          — select a block
 
 <span class="dim">In a traditional terminal, all output is one continuous stream of text.
@@ -4742,18 +4751,17 @@ with built-in documentation and parameters.</span>`
       content: `<span class="highlight">Warp AI</span> is built directly into the terminal, providing natural language command assistance.
 
 <span class="warning">AI capabilities:</span>
-  <span class="highlight"># natural language</span> — type # followed by what you want to do
-    Example: # find all files larger than 100MB
-    Warp suggests: find / -type f -size +100M
+  <span class="highlight">Natural language</span> — type what you want in plain English
+    Example: find all files larger than 100MB
+    Warp spots that this isn\'t a shell command and sends it to the agent
 
-  <span class="highlight">AI Command Search</span> — describe what you want in plain English
-  <span class="highlight">Error Explanation</span> — when a command fails, AI explains what went wrong
-  <span class="highlight">Command Correction</span> — suggests fixes for mistyped commands
+  <span class="highlight">Agent Mode</span> — an AI agent that can run commands and fix errors with you
+  <span class="highlight">Attach output</span> — when a command fails, hand its output to the agent
 
 <span class="warning">How to use:</span>
-  • Type <span class="highlight">#</span> at the prompt to start an AI query
-  • Click "Explain" on any error message
-  • Open AI panel: <span class="highlight">Ctrl+Shift+Space</span>
+  • Type a plain English request at the prompt
+  • Press <span class="highlight">Cmd+I</span> to switch between shell and Agent Mode yourself
+  • Press <span class="highlight">Cmd+Enter</span> to start a new agent conversation
 
 <span class="dim">The AI understands your context — your OS, your shell, and the commands
 you\'ve recently run — so suggestions are tailored to your situation.</span>`
@@ -4773,7 +4781,7 @@ you\'ve recently run — so suggestions are tailored to your situation.</span>`
   searchable, shareable, runnable resources.
 
 <span class="warning">How to use:</span>
-  • Open Warp Drive: <span class="highlight">Cmd+D</span>
+  • Open Warp Drive: <span class="highlight">Cmd+\\</span>
   • Create a workflow → share with your team
   • Browse your team\'s shared resources
 
@@ -6487,7 +6495,7 @@ function cmdFile(args) {
     if (name.endsWith('.gz')) return `${label} gzip compressed data`;
     if (name.endsWith('.png')) return `${label} PNG image data`;
     if (name.endsWith('.jpg') || name.endsWith('.jpeg')) return `${label} JPEG image data`;
-    if (/^<!doctype html/i.test(content)) return `${label} HTML document, ASCII text`;
+    if (/^<!doctype html/i.test(content)) return `${label} HTML document text, ASCII text`;
     if (name.endsWith('.json')) return `${label} JSON text data`;
     if (name.endsWith('.csv')) return `${label} CSV text`;
     if (/[^\x00-\x7f]/.test(content)) return `${label} Unicode text, UTF-8 text`;
@@ -6798,6 +6806,7 @@ function cmdSay(args) {
 
 // --- mdfind ---
 function cmdMdfind(args) {
+  args = args.map(escapeHtml);
   state.macosCommandsUsed = (state.macosCommandsUsed || new Set()); state.macosCommandsUsed.add('mdfind');
   if (state.macosCommandsUsed.size >= 3) checkAchievement('macos_native');
   if (!args[0]) return '<span class="error">Usage: mdfind "search query"</span>';
@@ -7021,7 +7030,7 @@ keybind = super+shift+d=new_split:down</span>`;
   if (args[0] === 'features') {
     return `<span class="warning">Ghostty Features:</span>
   <span class="success">✓</span> GPU-accelerated rendering (Metal on macOS)
-  <span class="success">✓</span> Sub-millisecond input latency
+  <span class="success">✓</span> Low input latency
   <span class="success">✓</span> Native macOS app with system integration
   <span class="success">✓</span> Splits (horizontal and vertical)
   <span class="success">✓</span> Tabs with customizable keybindings
@@ -7041,7 +7050,8 @@ keybind = super+shift+d=new_split:down</span>`;
   Super+Shift+D    Split down
   Super+[/]        Navigate splits
   Super+1-9        Switch to tab N
-  Super+Shift+Enter  Toggle fullscreen
+  Super+Shift+Enter  Zoom the current split
+  Super+Enter        Toggle fullscreen
   Super+Plus/Minus   Zoom in/out
 
 <span class="dim">Customize in ~/.config/ghostty/config:
@@ -7635,12 +7645,18 @@ function cmdOd(args, stdin) {
   const { sources, errors } = gatherInput('od', operands, stdin);
   if (errors.length && !sources.length) return errors.join('\n');
   const bytes = new TextEncoder().encode(sources.map(s => s.content).join(''));
-  const hex = (flags.t || '').startsWith('x');
   const addrHex = flags.A === 'x';
   const addr = n => addrHex ? n.toString(16).padStart(7, '0') : n.toString(8).padStart(7, '0');
   const lines = [];
   for (let i = 0; i < bytes.length; i += 16) {
-    lines.push(addr(i) + ' ' + Array.from(bytes.slice(i, i + 16), b => hex ? b.toString(16).padStart(2, '0') : b.toString(8).padStart(3, '0')).join(' '));
+    const chunk = bytes.slice(i, i + 16);
+    let cells;
+    if ((flags.t || '').startsWith('x')) cells = Array.from(chunk, b => b.toString(16).padStart(2, '0'));
+    else { // default: 16-bit words in octal, low byte first
+      cells = [];
+      for (let k = 0; k < chunk.length; k += 2) cells.push((chunk[k] + ((chunk[k + 1] || 0) << 8)).toString(8).padStart(6, '0'));
+    }
+    lines.push(addr(i) + ' ' + cells.join(' '));
   }
   if (bytes.length) lines.push(addr(bytes.length));
   return lines.join('\n');
@@ -7803,7 +7819,7 @@ function expandHistory(raw) {
 }
 
 // A learner's "No such file" is most often about where they are, or a starter file they deleted.
-function printPathTip() {
+function printPathTip(raw) {
   if (state.cwd !== '/home/player') {
     printToTerminal(`<span class="dim">(You're in ${escapeHtml(shortPath(state.cwd))}. Mission paths start from your home folder: type cd to go back there.)</span>`);
     return;
@@ -7811,7 +7827,7 @@ function printPathTip() {
   let missing = false;
   const scan = (cur, fresh) => {
     for (const [name, node] of Object.entries(fresh.children)) {
-      if (!cur.children[name]) missing = true;
+      if (!cur.children[name]) { if (raw.includes(name)) missing = true; }
       else if (node.type === 'dir' && cur.children[name].type === 'dir') scan(cur.children[name], node);
     }
   };
@@ -7839,7 +7855,7 @@ function handleCommand(raw, alreadyEchoed) {
   }
   if (output) printToTerminal(output, 'output');
   const failed = String(output).includes('class="error"');
-  if (failed && /No such file or directory/.test(output)) printPathTip();
+  if (failed && /No such file or directory/.test(output)) printPathTip(expanded);
 
   // Check pipes for achievement
   const pipeCount = splitPipes(expanded).length;
@@ -7915,6 +7931,7 @@ inputEl.addEventListener('keydown', e => {
   }
 });
 inputEl.addEventListener('input', updateSyntaxHighlight);
+['scroll', 'keyup', 'click'].forEach(ev => inputEl.addEventListener(ev, () => syncOverlayScroll()));
 
 // Simple tab completion
 function tabComplete() {
@@ -7975,7 +7992,7 @@ const validCommands = new Set([
   'chown','chgrp','script','asciinema','hyperfine','benchmark','sqlite3','xxd','hexdump',
   'base64','od','iconv','encoding','shellcheck','sleep','trap','for','while','until','if','case','select','lscpu',
   'printf','true','false','exit','test','[','[[','read','restore','eval','set','unset','shift','local','declare','typeset',
-  'seq','less','more','basename','dirname','realpath','sh','pip3','source','.','do','done','then','else','elif','fi','esac','return','break','continue'
+  'seq','less','more','basename','dirname','realpath','sh','pip3','shasum','source','.','do','done','then','else','elif','fi','esac','return','break','continue'
 ]);
 
 function updateSyntaxHighlight() {
@@ -8045,7 +8062,13 @@ function updateSyntaxHighlight() {
       html += `<span class="arg-text">${escapeHtml(word)}</span>`;
     }
   }
-  overlay.innerHTML = html;
+  overlay.innerHTML = `<span>${html}</span>`; // one inline box: bare spaces between flex items would vanish
+  syncOverlayScroll();
+}
+
+// The input scrolls sideways once a command is wider than it; the coloured text has to follow.
+function syncOverlayScroll() {
+  requestAnimationFrame(() => { document.getElementById('syntax-overlay').scrollLeft = inputEl.scrollLeft; });
 }
 
 // ============================================================
@@ -8285,7 +8308,7 @@ function showTab(tab) {
   });
   if (tab === 'adventure') renderAdventure();
   if (tab === 'challenges') renderChallenges();
-  if (tab === 'quiz') renderQuizMenu();
+  if (tab === 'quiz' && !quizState.active) renderQuizMenu(); // a quiz in progress stays where it was
 }
 
 function togglePanel() {
@@ -8300,6 +8323,8 @@ function showToast(message, type) {
   const el = document.createElement('div');
   el.className = `toast-msg ${type || ''}`;
   el.textContent = message;
+  // Finishing a chapter fires several at once; on a phone a full stack hides the whole mission panel
+  while (container.children.length >= 3) container.firstChild.remove();
   container.appendChild(el);
   setTimeout(() => el.remove(), 3000);
 }
@@ -8345,9 +8370,9 @@ const adventureQuests = [
     narrative: 'You\'re a new recruit at NEXUS Cyber Agency. Your handler, Agent_K, has been missing for 72 hours. Director Chen has given you access to the system to trace Agent_K\'s steps. Start by entering the nexus/ directory and reading your briefing.',
     location: 'nexus/',
     objectives: [
-      { text: 'Enter the nexus directory: <code>cd nexus</code>', validate: c => c.cwd.includes('/nexus'), done: false },
+      { text: 'Enter the nexus directory: <code>cd ~/nexus</code>', validate: c => c.cwd.endsWith('/nexus'), done: false },
       { text: 'Read the README briefing: <code>cat README.txt</code>', validate: c => c.cmd.includes('cat') && c.cmd.includes('README'), done: false },
-      { text: 'Explore the lobby: <code>cd lobby</code> then <code>ls</code>', validate: c => c.cwd.includes('/lobby') || (c.cmd === 'ls' && c.cwd.includes('/lobby')), done: false },
+      { text: 'Explore the lobby: <code>cd lobby</code> then <code>ls</code>', validate: c => /^ls\b/.test(c.cmd) && c.cwd.includes('/lobby'), done: false },
       { text: 'Read the notice board for intel: <code>cat notice_board.txt</code>', validate: c => c.cmd.includes('cat') && c.cmd.includes('notice_board'), done: false },
     ],
     reward: 'You learn that Agent_K missed briefings for 3 days and there was unusual server room activity.',
@@ -8358,7 +8383,7 @@ const adventureQuests = [
     narrative: 'The notice board mentions Agent_K has been missing. Time to check their office for clues. Agents often hide sensitive info in dotfiles (hidden files starting with a period). Use ls -a to reveal them.',
     location: 'nexus/agent_k_office/',
     objectives: [
-      { text: 'Go to Agent K\'s office: <code>cd</code> to agent_k_office', validate: c => c.cwd.includes('/agent_k_office'), done: false },
+      { text: 'Go to Agent K\'s office: <code>cd ~/nexus/agent_k_office</code>', validate: c => c.cwd.includes('/agent_k_office'), done: false },
       { text: 'Look for hidden files: <code>ls -a</code>', validate: c => c.cmd.includes('ls') && c.cmd.includes('-a') && c.cwd.includes('/agent_k_office'), done: false },
       { text: 'Read the hidden note: <code>cat .hidden_note</code>', validate: c => c.cmd.includes('cat') && c.cmd.includes('.hidden_note'), done: false },
       { text: 'Check their bookmarks for leads: <code>cat bookmarks.txt</code>', validate: c => c.cmd.includes('cat') && c.cmd.includes('bookmarks'), done: false },
@@ -8371,6 +8396,7 @@ const adventureQuests = [
     narrative: 'Agent_K was investigating a security breach. Their case files contain a breach report, suspect list, and timeline. Dig into the details — use grep to search for key info.',
     location: 'nexus/agent_k_office/case_files/',
     objectives: [
+      { text: 'Open the case files folder: <code>cd case_files</code>', validate: c => c.cwd.endsWith('/case_files'), done: false },
       { text: 'Read the breach report: <code>cat breach_report.txt</code>', validate: c => c.cmd.includes('cat') && c.cmd.includes('breach_report'), done: false },
       { text: 'View the suspects: <code>cat suspects.csv</code>', validate: c => c.cmd.includes('cat') && c.cmd.includes('suspects'), done: false },
       { text: 'Find unverified alibis: <code>grep "no" suspects.csv</code>', validate: c => c.cmd.includes('grep') && c.cmd.includes('suspects'), done: false },
@@ -8384,7 +8410,7 @@ const adventureQuests = [
     narrative: 'The breach happened in the server room. The access log is huge — you\'ll need grep, head, and tail to efficiently search through it. Look for the suspicious Jan 8 activity and the unregistered badge.',
     location: 'nexus/server_room/',
     objectives: [
-      { text: 'Navigate to the server room', validate: c => c.cwd.includes('/server_room'), done: false },
+      { text: 'Navigate to the server room: <code>cd ~/nexus/server_room</code>', validate: c => c.cwd.includes('/server_room'), done: false },
       { text: 'Search the access log for the unregistered badge: <code>grep "UNREGISTERED" access.log</code>', validate: c => c.cmd.includes('grep') && c.cmd.includes('access.log'), done: false },
       { text: 'Check the firewall rules: <code>cat firewall_rules.txt</code>', validate: c => c.cmd.includes('cat') && c.cmd.includes('firewall'), done: false },
       { text: 'Find Agent K\'s last activity: <code>tail access.log</code>', validate: c => c.cmd.includes('tail') && c.cmd.includes('access.log'), done: false },
@@ -8399,7 +8425,7 @@ const adventureQuests = [
     objectives: [
       { text: 'Reveal hidden files in the server room: <code>ls -a</code>', validate: c => c.cmd.includes('ls') && c.cmd.includes('-a') && c.cwd.includes('/server_room'), done: false },
       { text: 'Read the backdoor: <code>cat .backdoor</code>', validate: c => c.cmd.includes('cat') && c.cmd.includes('.backdoor'), done: false },
-      { text: 'Compare database backups to see what changed: <code>cat backups/db_users_jan7.csv</code> and <code>cat backups/db_users_jan9.csv</code>', validate: c => c.cmd.includes('cat') && c.cmd.includes('db_users') && c.cmd.includes('jan'), done: false },
+      { text: 'Compare database backups to see what changed: <code>cat backups/db_users_jan7.csv</code> and <code>cat backups/db_users_jan9.csv</code>', validate: c => c.cmd.includes('cat') && c.cmd.includes('db_users') && c.history.some(h => h.includes('db_users_jan7')) && c.history.some(h => h.includes('db_users_jan9')), done: false },
     ],
     reward: 'The backdoor is a reverse shell to the attacker\'s server. The svc_legacy_admin account was reactivated between Jan 7 and Jan 9. Only 3 people had those credentials.',
     xp: 60,
@@ -8409,10 +8435,10 @@ const adventureQuests = [
     narrative: 'Check the comms center. Agent_K received messages — including a threat from an unknown sender. But the most critical clue might be in their outbox... look for hidden files.',
     location: 'nexus/comms/',
     objectives: [
-      { text: 'Navigate to the comms center', validate: c => c.cwd.includes('/comms'), done: false },
+      { text: 'Navigate to the comms center: <code>cd ~/nexus/comms</code>', validate: c => c.cwd.includes('/comms'), done: false },
       { text: 'Read the threatening message: <code>cat inbox/msg_002_from_unknown.txt</code>', validate: c => c.cmd.includes('cat') && c.cmd.includes('msg_002'), done: false },
       { text: 'Read Yuki\'s analysis: <code>cat inbox/msg_003_from_analyst.txt</code>', validate: c => c.cmd.includes('cat') && c.cmd.includes('msg_003'), done: false },
-      { text: 'Check outbox for hidden drafts: <code>ls -a outbox/</code> then read it', validate: c => (c.cmd.includes('ls -a') && c.cmd.includes('outbox')) || (c.cmd.includes('cat') && c.cmd.includes('unsent')), done: false },
+      { text: 'Check outbox for hidden drafts: <code>ls -a outbox/</code>', validate: c => c.cmd.includes('ls -a') && c.cmd.includes('outbox'), done: false },
       { text: 'Read Agent K\'s unsent message: <code>cat outbox/.unsent_draft.txt</code>', validate: c => c.cmd.includes('cat') && c.cmd.includes('unsent_draft'), done: false },
     ],
     reward: 'Agent_K identified the mole as Diana Frost (ECHO) but was caught before they could send the report. The suspect codenames spell "REVEAL" — she was taunting everyone.',
@@ -8423,7 +8449,7 @@ const adventureQuests = [
     narrative: 'Agent_K said there\'s a hidden classified directory in the archives. Use find to locate hidden directories, and search the personnel files for intel on the suspects.',
     location: 'nexus/archives/',
     objectives: [
-      { text: 'Navigate to archives', validate: c => c.cwd.includes('/archives'), done: false },
+      { text: 'Navigate to archives: <code>cd ~/nexus/archives</code>', validate: c => c.cwd.includes('/archives'), done: false },
       { text: 'Search personnel for Agent_K: <code>grep "Agent_K" personnel/agents.csv</code>', validate: c => c.cmd.includes('grep') && c.cmd.includes('agents.csv'), done: false },
       { text: 'Find hidden directories: <code>find . -name ".*"</code> or <code>ls -a</code>', validate: c => (c.cmd.includes('find') && c.cwd.includes('/archives')) || (c.cmd.includes('ls -a') && c.cwd.includes('/archives')), done: false },
       { text: 'Read the classified Project Oracle file: <code>cat .classified/project_oracle.txt</code>', validate: c => c.cmd.includes('cat') && c.cmd.includes('project_oracle'), done: false },
@@ -8433,13 +8459,13 @@ const adventureQuests = [
   },
   {
     id: 'q8', title: 'Lab Analysis', num: 8,
-    narrative: 'The lab has Yuki Tanaka\'s malware analysis and some tools. The decoder script can reveal a hidden message in the suspect codenames — but you need to make it executable first with chmod.',
+    narrative: 'The lab has Yuki Tanaka\'s malware analysis and some tools. The decoder script can reveal a hidden message in the suspect codenames — but you need to make it executable first with chmod. Try running it before and after to see the difference.',
     location: 'nexus/lab/',
     objectives: [
-      { text: 'Navigate to the lab', validate: c => c.cwd.includes('/lab'), done: false },
+      { text: 'Navigate to the lab: <code>cd ~/nexus/lab</code>', validate: c => c.cwd.includes('/lab'), done: false },
       { text: 'Read the malware report: <code>cat analysis/malware_report.txt</code>', validate: c => c.cmd.includes('cat') && c.cmd.includes('malware_report'), done: false },
       { text: 'Make the decoder executable: <code>chmod +x tools/decoder.sh</code>', validate: c => c.cmd.includes('chmod') && c.cmd.includes('decoder'), done: false },
-      { text: 'Read the decoder output: <code>cat tools/decoder.sh</code>', validate: c => c.cmd.includes('cat') && c.cmd.includes('decoder'), done: false },
+      { text: 'Run the decoder: <code>./tools/decoder.sh</code>', validate: c => c.cmd.includes('decoder') && !c.cmd.includes('chmod'), done: false },
     ],
     reward: 'The malware matches Diana Frost\'s coding style with 92% confidence. The suspect codenames (RAVEN, ECHO, VIPER, EMBER, ATLAS, LYNX) spell R-E-V-E-A-L — "REVEAL."',
     xp: 60,
@@ -8449,7 +8475,7 @@ const adventureQuests = [
     narrative: 'The vault contains the physical evidence that ties everything together. But the access key has restricted permissions. You\'ll need to use chmod to change the permissions so you can read it.',
     location: 'nexus/vault/',
     objectives: [
-      { text: 'Navigate to the vault', validate: c => c.cwd.includes('/vault'), done: false },
+      { text: 'Navigate to the vault: <code>cd ~/nexus/vault</code>', validate: c => c.cwd.includes('/vault'), done: false },
       { text: 'Try to find the access key: <code>ls -a</code>', validate: c => c.cmd.includes('ls -a') && c.cwd.includes('/vault'), done: false },
       { text: 'Fix permissions on the key: <code>chmod 644 .access_key</code>', validate: c => c.cmd.includes('chmod') && c.cmd.includes('access_key'), done: false },
       { text: 'Read the access key: <code>cat .access_key</code>', validate: c => c.cmd.includes('cat') && c.cmd.includes('access_key'), done: false },
@@ -8576,7 +8602,7 @@ function beginAdventure() {
   showTab('adventure');
   printToTerminal('\n<span class="warning">━━━ ADVENTURE MODE: THE GHOST IN THE MACHINE ━━━</span>', 'warning');
   printToTerminal('<span class="info">Agent_K is missing. Your investigation starts in ~/nexus/</span>', 'info');
-  printToTerminal('<span class="dim">Type: cd nexus</span>\n', 'dim');
+  printToTerminal('<span class="dim">Type: cd ~/nexus</span>\n', 'dim');
 }
 
 function selectQuest(idx) {
@@ -8622,12 +8648,13 @@ function validateAdventure(rawCmd, failed) {
     printToTerminal(`<span class="info">${quest.reward}</span>\n`, 'info');
 
     // Auto-advance to next quest
-    if (adventureState.currentQuest < adventureQuests.length - 1) {
-      adventureState.currentQuest++;
-      const next = adventureQuests[adventureState.currentQuest];
+    const nextIdx = adventureQuests.findIndex(q => !adventureState.completedQuests.has(q.id));
+    if (nextIdx >= 0) {
+      adventureState.currentQuest = nextIdx;
+      const next = adventureQuests[nextIdx];
       printToTerminal(`<span class="warning">Next Quest: ${next.title}</span>`, 'warning');
       printToTerminal(`<span class="dim">${next.narrative.slice(0, 100)}...</span>\n`, 'dim');
-    } else if (adventureState.completedQuests.size === adventureQuests.length) {
+    } else {
       printToTerminal(`\n<span class="success">🎖️ INVESTIGATION COMPLETE — You solved the case!</span>`, 'success');
       printToTerminal(`<span class="info">Diana Frost (ECHO) is the mole. Agent_K's work is finished. You are a true terminal detective.</span>\n`, 'info');
     }
@@ -8644,14 +8671,14 @@ const challenges = {
     { title:'Where Am I?', desc:'Print your current working directory.', validate:c=>c.cmd==='pwd', xp:10 },
     { title:'Who Am I?', desc:'Display your username.', validate:c=>c.cmd==='whoami', xp:10 },
     { title:'List It', desc:'List the contents of your home directory.', validate:c=>c.cmd==='ls'&&c.cwd==='/home/player', xp:10 },
-    { title:'Hidden Secrets', desc:'Show all files including hidden ones in your home directory.', validate:c=>c.cmd.includes('ls')&&c.cmd.includes('-a'), xp:15 },
-    { title:'Go Home', desc:'Navigate to your home directory from anywhere.', validate:c=>(c.cmd==='cd'||c.cmd==='cd ~')&&c.cwd==='/home/player', xp:10 },
+    { title:'Hidden Secrets', desc:'Show all files including hidden ones in your home directory.', validate:c=>usesCmd(c,'ls')&&/ -\w*a/.test(c.cmd), xp:15 },
+    { title:'Go Home', desc:'Navigate to your home directory from anywhere.', validate:c=>(c.cmd==='cd'||c.cmd==='cd ~'||c.cmd==='cd $HOME')&&c.cwd==='/home/player', xp:10 },
     { title:'Read the Notes', desc:'Display the contents of ~/documents/notes.txt', validate:c=>c.cmd.includes('cat')&&c.cmd.includes('notes.txt'), xp:15 },
     { title:'Make a File', desc:'Create a new empty file called challenge.txt', validate:(c,s)=>c.cmd.includes('touch')&&c.cmd.includes('challenge.txt'), xp:15 },
     { title:'Make a Folder', desc:'Create a new directory called test-dir', validate:c=>c.cmd.includes('mkdir')&&c.cmd.includes('test-dir'), xp:15 },
     { title:'Echo Chamber', desc:'Use echo to print "I love the terminal"', validate:c=>c.cmd.startsWith('echo ')&&c.cmd.toLowerCase().includes('terminal'), xp:10 },
-    { title:'First Lines', desc:'Show only the first 5 lines of ~/documents/quotes.txt', validate:c=>c.cmd.includes('head')&&c.cmd.includes('-n')&&c.cmd.includes('5'), xp:15 },
-    { title:'Last Lines', desc:'Show only the last 3 lines of ~/documents/projects/data/log.txt', validate:c=>c.cmd.includes('tail')&&c.cmd.includes('-n')&&c.cmd.includes('3'), xp:15 },
+    { title:'First Lines', desc:'Show only the first 5 lines of ~/documents/quotes.txt', validate:c=>usesCmd(c,'head')&&/-n\s*5\b|-5\b/.test(c.cmd)&&c.cmd.includes('quotes.txt'), xp:15 },
+    { title:'Last Lines', desc:'Show only the last 3 lines of ~/documents/projects/data/log.txt', validate:c=>usesCmd(c,'tail')&&/-n\s*3\b|-3\b/.test(c.cmd)&&c.cmd.includes('log.txt'), xp:15 },
     { title:'Into the Projects', desc:'Navigate into ~/documents/projects/', validate:c=>c.cwd.includes('/projects'), xp:10 },
     { title:'Count the Lines', desc:'Count the number of lines in ~/documents/todo.txt using wc', validate:c=>c.cmd.includes('wc')&&c.cmd.includes('todo.txt'), xp:15 },
     { title:'What is Bash?', desc:'Look up "bash" in the glossary command.', validate:c=>c.cmd==='glossary bash', xp:10 },
@@ -8684,17 +8711,17 @@ const challenges = {
     { title:'Count the Errors', desc:'Count how many ERROR lines are in the log using grep and wc -l with a pipe.', validate:c=>c.cmd.includes('grep')&&c.cmd.includes('ERROR')&&c.cmd.includes('wc')&&c.cmd.includes('|'), xp:45 },
     { title:'Data Pipeline', desc:'Extract a column from a CSV, sort it, and get unique values — all in one pipeline.', validate:c=>c.cmd.includes('cut')&&c.cmd.includes('sort')&&c.cmd.includes('uniq')&&(c.cmd.match(/\|/g)||[]).length>=2, xp:50 },
     { title:'Log Detective', desc:'Find all WARNING entries in the log and show their line numbers.', validate:c=>c.cmd.includes('grep')&&c.cmd.includes('-n')&&c.cmd.toLowerCase().includes('warning')&&c.cmd.includes('log'), xp:40 },
-    { title:'Script Maker', desc:'Create a file with a shebang line: echo "#!/bin/bash" > myscript.sh then chmod +x it.', validate:c=>c.cmd.includes('chmod')&&c.cmd.includes('+x'), xp:45 },
-    { title:'Full Audit', desc:'List ALL files (including hidden) with full details in your home directory.', validate:c=>(c.cmd==='ls -la'||c.cmd==='ls -al')&&c.cwd==='/home/player', xp:35 },
+    { title:'Script Maker', desc:'Create a file with a shebang line: echo \'#!/bin/bash\' > myscript.sh then chmod +x it.', validate:c=>usesCmd(c,'chmod')&&c.cmd.includes('+x')&&c.cmd.includes('myscript'), xp:45 },
+    { title:'Full Audit', desc:'List ALL files (including hidden) with full details in your home directory.', validate:c=>/^ls (-la|-al|-a -l|-l -a)$/.test(c.cmd)&&c.cwd==='/home/player', xp:35 },
     { title:'Reverse Sort', desc:'Sort any file in reverse order using sort -r.', validate:c=>c.cmd.includes('sort')&&c.cmd.includes('-r'), xp:35 },
   ],
   expert: [
     { title:'Sales Report', desc:'Using the sales CSV: extract product names, sort, count unique occurrences. Pipeline: cat → cut → sort → uniq -c', validate:c=>c.cmd.includes('sales')&&c.cmd.includes('uniq -c')&&(c.cmd.match(/\|/g)||[]).length>=2, xp:60 },
     { title:'Admin Analysis', desc:'Find all admin users in users.csv using grep, then count them with wc -l.', validate:c=>c.cmd.includes('grep')&&c.cmd.includes('admin')&&c.cmd.includes('wc')&&c.cmd.includes('users.csv'), xp:55 },
     { title:'Log Forensics', desc:'Get the last 5 log entries, search them for INFO, and count matches.', validate:c=>c.cmd.includes('tail')&&c.cmd.includes('grep')&&c.cmd.includes('wc')&&(c.cmd.match(/\|/g)||[]).length>=2, xp:60 },
-    { title:'Full System Scan', desc:'Find all .txt files from root (/), pipe to wc -l to count them.', validate:c=>c.cmd.includes('find')&&c.cmd.includes('*.txt'), xp:55 },
+    { title:'Full System Scan', desc:'Find all .txt files from root (/), pipe to wc -l to count them.', validate:c=>usesCmd(c,'find')&&c.cmd.includes('*.txt')&&usesCmd(c,'wc'), xp:55 },
     { title:'Config Extractor', desc:'Read the JSON config file and grep for "port" to find port settings.', validate:c=>c.cmd.includes('cat')&&c.cmd.includes('config.json')&&c.cmd.includes('grep')&&c.cmd.includes('port')&&c.cmd.includes('|'), xp:60 },
-    { title:'Build & Verify', desc:'Create a directory, create a file inside it, write content to it, then cat it — all with && chaining.', validate:c=>{const p=c.cmd.split('&&');return p.length>=3&&c.cmd.includes('mkdir')&&(c.cmd.includes('echo')||c.cmd.includes('touch'));}, xp:65 },
+    { title:'Build & Verify', desc:'Create a directory, create a file inside it, write content to it, then cat it — all with && chaining.', validate:c=>{const p=c.cmd.split('&&');return p.length>=3&&usesCmd(c,'mkdir')&&(usesCmd(c,'echo')||usesCmd(c,'touch'))&&usesCmd(c,'cat');}, xp:65 },
   ],
 };
 
@@ -8715,9 +8742,11 @@ function getRandomChallenge(diff) {
   const done = challengeState.completed[diff];
   const available = pool.filter((_,i) => !done.has(i));
   if (available.length === 0) {
-    // Reset pool
+    // Every challenge in this difficulty is done: start the pool over
     challengeState.completed[diff] = new Set();
-    return { challenge: pool[Math.floor(Math.random()*pool.length)], index: Math.floor(Math.random()*pool.length) };
+    printToTerminal(`<span class="success">You've finished every ${diff} challenge! Starting the list over for practice.</span>`, 'success');
+    const again = Math.floor(Math.random()*pool.length);
+    return { challenge: pool[again], index: again };
   }
   const indices = pool.map((_,i)=>i).filter(i=>!done.has(i));
   const idx = indices[Math.floor(Math.random()*indices.length)];
@@ -8727,7 +8756,7 @@ function getRandomChallenge(diff) {
 function startChallenge(diff) {
   challengeState.difficulty = diff || challengeState.difficulty;
   const { challenge, index } = getRandomChallenge(challengeState.difficulty);
-  challengeState.current = { ...challenge, index, startTime: Date.now(), attempts: 0 };
+  challengeState.current = { ...challenge, index, difficulty: challengeState.difficulty, startTime: Date.now(), attempts: 0 };
   renderChallenges();
   printToTerminal(`\n<span class="warning">━━━ CHALLENGE: ${challenge.title} ━━━</span>`, 'warning');
   printToTerminal(`<span class="info">${challenge.desc}</span>\n`, 'info');
@@ -8743,7 +8772,7 @@ function validateChallenge(rawCmd, failed) {
     const ch = challengeState.current;
     const timeBonus = (Date.now() - ch.startTime) < 15000 ? Math.floor(ch.xp * 0.5) : 0;
     const totalXP = ch.xp + timeBonus;
-    challengeState.completed[challengeState.difficulty].add(ch.index);
+    challengeState.completed[ch.difficulty].add(ch.index);
     challengeState.totalCompleted++;
     challengeState.streak++;
     if (challengeState.streak > challengeState.bestStreak) challengeState.bestStreak = challengeState.streak;
@@ -8805,7 +8834,7 @@ function renderChallenges() {
   if (challengeState.current) {
     const ch = challengeState.current;
     html += `<div class="challenge-card active-challenge">
-      <span class="ch-diff ${challengeState.difficulty}">${challengeState.difficulty.toUpperCase()}</span>
+      <span class="ch-diff ${ch.difficulty}">${ch.difficulty.toUpperCase()}</span>
       <h4>${ch.title}</h4>
       <p>${ch.desc}</p>
       <p class="ch-xp">🏆 ${ch.xp} XP ${challengeState.streak > 0 ? `· 🔥 ${challengeState.streak} streak` : ''}</p>
@@ -8910,14 +8939,14 @@ const quizQuestions = {
     { q:'What is Claude Code?', options:['A code editor like VS Code','An AI coding CLI tool from Anthropic','A terminal emulator','A programming language'], correct:1, explain:'Claude Code is Anthropic\'s official CLI for Claude. It\'s an agentic AI coding tool that lives in your terminal, can read your codebase, make edits, and run commands.' },
     { q:'What does MCP stand for in Claude Code?', options:['Machine Code Protocol','Model Context Protocol','Multi-Channel Processing','Managed Code Pipeline'], correct:1, explain:'MCP = Model Context Protocol. It\'s a standard that lets Claude connect to external services like databases, APIs, and tools through "MCP servers."' },
     { q:'What does the /compact slash command do?', options:['Compresses files on disk','Summarizes the conversation to free up context space','Minimizes the terminal window','Compiles code'], correct:1, explain:'/compact compresses the conversation context, summarizing it so Claude stays fast and doesn\'t lose important context in long sessions.' },
-    { q:'What are Claude Code hooks?', options:['Git hooks for commits','Shell commands that run at specific points in Claude\'s workflow','Ways to connect to external APIs','Keyboard shortcuts'], correct:1, explain:'Hooks are shell commands configured to run at events like PreToolUse, PostToolUse, Notification, and Stop. For example, auto-formatting after every file edit.' },
-    { q:'How do you install Claude Code?', options:['brew install claude','pip install claude-code','npm install -g @anthropic-ai/claude-code','Download from App Store'], correct:2, explain:'Claude Code is installed via npm: npm install -g @anthropic-ai/claude-code. Then run "claude" in any project directory to start.' },
-    { q:'What is a "skill" in Claude Code?', options:['A difficulty level','A specialized pre-built task recipe (like /commit or /review-pr)','A programming language Claude knows','A certification'], correct:1, explain:'Skills are specialized capabilities that combine Claude\'s tools with domain-specific knowledge. Examples include /commit (git commits) and /review-pr (pull request reviews).' },
+    { q:'What are Claude Code hooks?', options:['Git hooks for commits','Shell commands that run at specific points in Claude\'s workflow','Ways to connect to external APIs','Keyboard shortcuts'], correct:1, explain:'Hooks are commands configured to run at events like SessionStart, PreToolUse, PostToolUse, Notification, and Stop. For example, auto-formatting after every file edit.' },
+    { q:'What is the recommended way to install Claude Code on macOS or Linux?', options:['brew install claude','pip install claude-code','curl -fsSL https://claude.ai/install.sh | bash','Download from App Store'], correct:2, explain:'The native installer is the recommended route: curl -fsSL https://claude.ai/install.sh | bash. npm install -g @anthropic-ai/claude-code also works. Then run "claude" in any project directory to start.' },
+    { q:'What is a "skill" in Claude Code?', options:['A difficulty level','A set of written instructions Claude can load for a task (like /code-review)','A programming language Claude knows','A certification'], correct:1, explain:'A skill is a SKILL.md file holding instructions for a kind of task. Claude uses it when it\'s relevant, or you run it by name, like /code-review.' },
   ],
   warpTerminal: [
     { q:'What are "blocks" in Warp?', options:['Code blocks in a file','Separate, selectable command+output groupings','Ad blockers','Workflow templates'], correct:1, explain:'In Warp, each command and its output is a separate "block" you can click, copy, or share. This brings structure to terminal output instead of one continuous stream.' },
     { q:'What is Warp Drive?', options:['A speed setting','A shared workspace for team terminal knowledge','A file manager','A backup feature'], correct:1, explain:'Warp Drive is a shared workspace where teams store workflows, environments, and notebooks. It captures tribal knowledge like deployment commands and common tasks.' },
-    { q:'How do you trigger Warp AI suggestions?', options:['Type "ai" and press Enter','Type # followed by a natural language description','Press F1','Right-click and select AI'], correct:1, explain:'Type # at the Warp prompt followed by what you want to do (e.g., "# find files larger than 100MB") and Warp AI suggests the right command.' },
+    { q:'How do you ask Warp\'s AI for help?', options:['Type "ai" and press Enter','Type your request in plain English, or press Cmd+I for Agent Mode','Press F1','Right-click and select AI'], correct:1, explain:'Warp can tell a plain English request from a shell command. Type what you want (e.g., "find files larger than 100MB"), or press Cmd+I to switch into Agent Mode yourself.' },
     { q:'What is a Warp Workflow?', options:['A CI/CD pipeline','A parameterized, saved command sequence you can share','A type of shell script','A keyboard macro'], correct:1, explain:'Workflows are saved command templates with parameters, descriptions, and defaults. They can be shared with your team via Warp Drive and searched with natural language.' },
     { q:'What does Cmd+P do in Warp?', options:['Print the screen','Open the command palette','Paste from clipboard','Open preferences'], correct:1, explain:'Cmd+P opens Warp\'s command palette — a universal search for commands, files, workflows, and settings. It\'s Warp\'s Swiss Army knife.' },
     { q:'What keyboard shortcut splits a pane in Warp?', options:['Cmd+S','Cmd+D','Ctrl+P','Alt+Tab'], correct:1, explain:'Cmd+D splits the current pane to the right. Cmd+Shift+D splits downward. This lets you run multiple terminal sessions side by side.' },
@@ -8938,6 +8967,7 @@ let quizState = {
 
 function renderQuizMenu() {
   if (quizState._advanceTimer) { clearTimeout(quizState._advanceTimer); quizState._advanceTimer = null; }
+  quizState.active = false;
   const panel = document.getElementById('panel-quiz');
   let html = '<h2>Quiz Mode</h2>';
   html += '<p style="margin-bottom:12px;color:var(--dim)">Test your knowledge! Questions are randomized each time.</p>';
@@ -8986,6 +9016,7 @@ function renderQuizMenu() {
 }
 
 function startQuiz(category) {
+  quizState.active = true;
   quizState.category = category;
   quizState.score = 0;
   quizState.total = 0;
@@ -9017,6 +9048,7 @@ function showQuizQuestion() {
   const panel = document.getElementById('panel-quiz');
   if (quizState.qIndex >= quizState.pool.length) {
     // Quiz complete
+    quizState.active = false;
     const pct = Math.round((quizState.score / quizState.total) * 100);
     const grade = pct >= 90 ? 'A+' : pct >= 80 ? 'A' : pct >= 70 ? 'B' : pct >= 60 ? 'C' : 'Keep practicing!';
     let html = '<h2>Quiz Complete!</h2>';
