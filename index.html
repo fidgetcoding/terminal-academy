@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+<link rel="icon" href="data:,">
 <title>Terminal Academy</title>
 <style>
 :root {
@@ -95,7 +97,7 @@ body { background:var(--bg); color:var(--text); font-family:var(--font); height:
 #input-line .syntax-overlay {
   position:absolute; left:0; top:0; bottom:0; display:flex; align-items:center;
   font-family:var(--font); font-size:13px; pointer-events:none; z-index:1;
-  white-space:pre; overflow:hidden; right:0;
+  white-space:pre; overflow:hidden; right:0; padding-right:2px; /* Safari scrolls the input 2px past the text, for the caret */
 }
 #input-line .syntax-overlay .cmd-valid { color:var(--green); text-shadow:0 0 6px rgba(0,255,136,.3); }
 #input-line .syntax-overlay .cmd-invalid { color:var(--red); text-shadow:0 0 6px rgba(255,56,96,.3); }
@@ -113,16 +115,25 @@ body { background:var(--bg); color:var(--text); font-family:var(--font); height:
 }
 #side-panel.hidden { display:none; }
 .panel-tabs {
-  display:flex; border-bottom:1px solid var(--border); flex-shrink:0;
+  display:flex; border-bottom:1px solid var(--border); flex-shrink:0; overflow-x:auto;
 }
 .panel-tabs button {
-  flex:1; padding:10px; background:transparent; border:none;
+  flex:1 0 auto; padding:10px; background:transparent; border:none;
   color:var(--dim); font-family:var(--font); font-size:12px; cursor:pointer;
   border-bottom:2px solid transparent; transition:all .2s;
 }
 .panel-tabs button.active { color:var(--green); border-bottom-color:var(--green); }
 .panel-tabs button:hover { color:var(--text); }
 .panel-content { flex:1; overflow-y:auto; padding:16px; }
+.save-box {
+  display:block; width:100%; height:90px; margin:8px 0; padding:8px; resize:vertical; background:var(--term-bg);
+  color:var(--text); border:1px solid var(--border); border-radius:4px; font-family:var(--font); font-size:11px;
+  overflow-wrap:anywhere;
+}
+.save-note { color:var(--dim); font-size:11px; margin-top:8px; }
+#panel-save input[type=file] { display:block; max-width:100%; color:var(--text); font-size:12px; }
+#save-status { font-size:12px; line-height:1.6; margin-top:10px; }
+#save-confirm { margin-top:10px; padding:10px; background:var(--panel2); border:1px solid var(--yellow); border-radius:6px; }
 .panel-content h2 { color:var(--cyan); font-size:14px; margin-bottom:8px; }
 .panel-content h3 { color:var(--green); font-size:13px; margin:12px 0 6px; }
 .panel-content p, .panel-content li { font-size:12px; line-height:1.6; color:var(--text); }
@@ -392,6 +403,7 @@ body { background:var(--bg); color:var(--text); font-family:var(--font); height:
   .task-item { font-size:11px; padding:6px 8px; }
   .challenge-card { padding:10px; }
   .quiz-option { padding:8px 10px; font-size:11px; }
+  .save-box { font-size:16px; } /* 16px prevents iOS zoom on focus */
   .quest-narrative { font-size:11px; padding:8px; }
   .quest-objective { font-size:11px; padding:5px 8px; }
   .glossary-item dt { font-size:12px; }
@@ -464,6 +476,7 @@ body { background:var(--bg); color:var(--text); font-family:var(--font); height:
     <button id="btn-quiz" onclick="showTab('quiz')">Quiz</button>
     <button id="btn-achievements" onclick="showTab('achievements')">Achievements</button>
     <button id="btn-glossary" onclick="showTab('glossary')">Encyclopedia</button>
+    <button id="btn-save" onclick="showTab('save')">Save</button>
     <button id="btn-toggle-panel" onclick="togglePanel()">◧</button>
   </div>
 </div>
@@ -491,6 +504,7 @@ body { background:var(--bg); color:var(--text); font-family:var(--font); height:
       <button data-tab="quiz" onclick="showTab('quiz')">Quiz</button>
       <button data-tab="achievements" onclick="showTab('achievements')">Achievements</button>
       <button data-tab="glossary" onclick="showTab('glossary')">Encyclopedia</button>
+      <button data-tab="save" onclick="showTab('save')">Save</button>
     </div>
     <div class="panel-content" id="panel-lessons"></div>
     <div class="panel-content" id="panel-adventure" style="display:none"></div>
@@ -498,6 +512,28 @@ body { background:var(--bg); color:var(--text); font-family:var(--font); height:
     <div class="panel-content" id="panel-quiz" style="display:none"></div>
     <div class="panel-content" id="panel-achievements" style="display:none"></div>
     <div class="panel-content" id="panel-glossary" style="display:none"></div>
+    <div class="panel-content" id="panel-save" style="display:none">
+      <h2>Move Your Progress</h2>
+      <p>Your progress lives in this browser. To keep playing on another device, take a save with you. Nothing is uploaded: a save only goes where you send it.</p>
+      <h3>Take a save</h3>
+      <button class="challenge-btn" onclick="downloadSave()">Download save file</button>
+      <button class="challenge-btn" onclick="showSaveCode()">Show save code</button>
+      <textarea class="save-box" id="save-code-out" readonly style="display:none" aria-label="Your save code"></textarea>
+      <button class="challenge-btn" id="save-copy-btn" onclick="copySaveCode()" style="display:none">Copy code</button>
+      <p class="save-note">A save holds your files and command history, so only share it with people you trust.</p>
+      <h3>Load a save</h3>
+      <p><label for="save-file">Choose a save file:</label></p>
+      <input type="file" id="save-file" accept=".json,.txt,application/json,text/plain" onchange="loadSaveFile(this)">
+      <p style="margin-top:12px"><label for="save-code-in">Or paste a save code:</label></p>
+      <textarea class="save-box" id="save-code-in" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
+      <button class="challenge-btn" onclick="checkSaveCode()">Check this code</button>
+      <div id="save-status" role="status" aria-live="polite"></div>
+      <div id="save-confirm" style="display:none">
+        <p id="save-summary"></p>
+        <button class="challenge-btn" onclick="applyImport()">Load this save</button>
+        <button class="challenge-btn skip" onclick="cancelImport()">Cancel</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -698,7 +734,7 @@ function getNode(fs, path, _symlinkDepth) {
   const parts = path.split('/').filter(Boolean);
   let node = fs['/'];
   for (const p of parts) {
-    if (!node || node.type !== 'dir' || !node.children[p]) return null;
+    if (!node || node.type !== 'dir' || !own(node.children, p)) return null;
     node = node.children[p];
   }
   // Follow symlinks with recursion guard
@@ -714,7 +750,7 @@ function getParentAndName(fs, path) {
   const parts = path.split('/').filter(Boolean);
   const name = parts.pop();
   const parentPath = '/' + parts.join('/');
-  const parent = getNode(fs, parentPath);
+  const parent = name === '__proto__' ? null : getNode(fs, parentPath);
   return { parent, name, parentPath };
 }
 
@@ -2221,11 +2257,70 @@ function evalArith(expr) {
     return val;
   }
   e = e.replace(/\$?\b([A-Za-z_]\w*)\b/g, (_, name) => String(num(name)));
-  if (!/^[\d\s+\-*/%()<>=!&|]*$/.test(e) || !e.trim()) return 0;
   try {
-    const v = Function('"use strict"; return (' + e + ')')();
-    return v === true ? 1 : v === false ? 0 : Math.trunc(v);
+    return Math.trunc(calcExpression(e, { intDivide: true })) || 0;
   } catch (err) { return 0; }
+}
+
+// Works out a sum from $(( )), python3 -c, or node -e. It's parsed by hand and never handed to JavaScript, so text
+// from a command or a save has no way to run as code.
+function calcExpression(src, opts) {
+  const options = opts || {};
+  const toks = src.match(/Math\.[A-Za-z0-9]+|\d+\.?\d*|\.\d+|\*\*|\/\/|==|!=|<=|>=|<<|>>|&&|\|\||[-+*/%()<>!,&|]/g) || [];
+  if (!toks.length || toks.join('') !== src.replace(/\s+/g, '')) throw new SyntaxError('not a sum');
+  let p = 0;
+  const take = t => (toks[p] === t ? (p++, true) : false);
+  const left = (next, ops) => () => {
+    let v = next();
+    while (ops[toks[p]]) { const f = ops[toks[p++]]; v = f(v, next()); }
+    return v;
+  };
+  const primary = () => {
+    const t = toks[p++];
+    if (t === undefined) throw new SyntaxError('sum ended early');
+    if (t === '(') {
+      const v = or();
+      if (!take(')')) throw new SyntaxError('missing )');
+      return v;
+    }
+    if (/^[\d.]/.test(t)) return parseFloat(t);
+    if (t.startsWith('Math.')) {
+      const name = t.slice(5);
+      if (!own(Math, name)) throw new SyntaxError('unknown Math function');
+      if (typeof Math[name] === 'number') return Math[name];
+      if (!take('(')) throw new SyntaxError('missing (');
+      const args = [];
+      if (!take(')')) {
+        do args.push(or()); while (take(','));
+        if (!take(')')) throw new SyntaxError('missing )');
+      }
+      return Math[name](...args);
+    }
+    throw new SyntaxError('unexpected ' + t);
+  };
+  const power = () => { const v = primary(); return take('**') ? Math.pow(v, unary()) : v; };
+  const unary = () => {
+    if (take('-')) return -unary();
+    if (take('+')) return unary();
+    if (take('!')) return unary() ? 0 : 1;
+    return power();
+  };
+  const divide = (a, b) => {
+    if (b === 0 && options.intDivide) throw new RangeError('division by 0');
+    return options.intDivide ? Math.trunc(a / b) : a / b;
+  };
+  const mult = left(unary, { '*': (a, b) => a * b, '/': divide, '//': (a, b) => Math.floor(a / b), '%': (a, b) => a % b });
+  const add = left(mult, { '+': (a, b) => a + b, '-': (a, b) => a - b });
+  const shift = left(add, { '<<': (a, b) => a << b, '>>': (a, b) => a >> b });
+  const compare = left(shift, { '<': (a, b) => +(a < b), '>': (a, b) => +(a > b), '<=': (a, b) => +(a <= b), '>=': (a, b) => +(a >= b) });
+  const equal = left(compare, { '==': (a, b) => +(a === b), '!=': (a, b) => +(a !== b) });
+  const bitAnd = left(equal, { '&': (a, b) => a & b });
+  const bitOr = left(bitAnd, { '|': (a, b) => a | b });
+  const and = left(bitOr, { '&&': (a, b) => +(!!a && !!b) });
+  const or = left(and, { '||': (a, b) => +(!!a || !!b) });
+  const result = or();
+  if (p !== toks.length) throw new SyntaxError('extra text after the sum');
+  return result;
 }
 
 function expandBraces(w) {
@@ -3134,7 +3229,7 @@ function linkNode(path) {
   if (path === '/') return state.fs['/'];
   const { parent, name } = getParentAndName(state.fs, path);
   if (!parent || parent.type !== 'dir') return null;
-  return parent.children[name] || null;
+  return own(parent.children, name) ? parent.children[name] : null;
 }
 
 function randomAscii(n) {
@@ -3894,7 +3989,8 @@ function cmdMkdir(args) {
     if (flags.p) {
       let current = state.fs['/'], failed = false;
       for (const p of path.split('/').filter(Boolean)) {
-        if (!current.children[p]) current.children[p] = dir('rwxr-xr-x', {});
+        if (p === '__proto__') { errors.push(`<span class="error">mkdir: ${escapeHtml(d)}: Invalid argument</span>`); failed = true; break; }
+        if (!own(current.children, p)) current.children[p] = dir('rwxr-xr-x', {});
         current = current.children[p];
         if (current.type !== 'dir') { errors.push(`<span class="error">mkdir: ${escapeHtml(d)}: Not a directory</span>`); failed = true; break; }
       }
@@ -5202,8 +5298,8 @@ function cmdGit(args) {
     }
     case 'log': {
       if (!repo.commits.length) return `<span class="error">fatal: your current branch '${escapeHtml(repo.branch)}' does not have any commits yet</span>`;
-      if (args.includes('--oneline')) return repo.commits.map(c => `<span class="warning">${c.hash.slice(0, 7)}</span> ${escapeHtml(c.msg)}`).join('\n');
-      return repo.commits.map((c, i) => `<span class="warning">commit ${c.hash}${i === 0 ? ` (HEAD -&gt; ${escapeHtml(repo.branch)})` : ''}</span>\nAuthor: player &lt;player@academy.dev&gt;\nDate:   ${c.date}\n\n    ${escapeHtml(c.msg)}`).join('\n\n');
+      if (args.includes('--oneline')) return repo.commits.map(c => `<span class="warning">${escapeHtml(c.hash.slice(0, 7))}</span> ${escapeHtml(c.msg)}`).join('\n');
+      return repo.commits.map((c, i) => `<span class="warning">commit ${escapeHtml(c.hash)}${i === 0 ? ` (HEAD -&gt; ${escapeHtml(repo.branch)})` : ''}</span>\nAuthor: player &lt;player@academy.dev&gt;\nDate:   ${escapeHtml(c.date)}\n\n    ${escapeHtml(c.msg)}`).join('\n\n');
     }
     case 'diff':
       return repo.commits.length ? '' : '<span class="dim">Nothing to compare yet. git diff shows edits to tracked files that are not staged.</span>';
@@ -6075,8 +6171,7 @@ Type exit() or Ctrl+D to leave. This simulator returns you to the prompt straigh
       const expr = arg.replace(/\s+/g, '');
       if (/^[\d+\-*/%().]+$/.test(expr)) {
         try {
-          const v = Function('"use strict"; return (' + expr.replace(/\/\//g, '/') + ')')();
-          return String(v);
+          return String(calcExpression(expr));
         } catch (e) {
           return `<span class="error">SyntaxError: invalid syntax</span>`;
         }
@@ -6128,7 +6223,7 @@ Type .exit or Ctrl+D to leave. This simulator returns you to the prompt straight
     const str = /^(['"`])(.*)\1$/s.exec(expr);
     if (str) return escapeHtml(str[2]);
     if (expr && /^(?:[\d\s+\-*/%().,]|Math\.[A-Za-z0-9]+)+$/.test(expr)) {
-      try { return String(Function('"use strict"; return (' + expr + ')')()); } catch (e) { return `<span class="error">SyntaxError: Invalid or unexpected token</span>`; }
+      try { return String(calcExpression(expr)); } catch (e) { return `<span class="error">SyntaxError: Invalid or unexpected token</span>`; }
     }
     return `<span class="dim">This simulator can only run console.log() of a sum, a string, or Math.* with node -e. Real Node runs any JavaScript here.</span>`;
   }
@@ -7659,6 +7754,7 @@ function cmdHelp() {
 <span class="warning">Warp Terminal:</span>    warp &lt;topic&gt; (blocks, workflows, ai, drive, tips)
 <span class="warning">Learning:</span>         man &lt;cmd&gt;, glossary [term], help, tldr
 <span class="warning">Recovery:</span>         restore (brings back any starter file you deleted)
+<span class="warning">Other devices:</span>    the Save tab moves your progress with a file or a code
 
 <span class="warning">Special Syntax:</span>
   command1 <span class="highlight">|</span> command2    Pipe output to next command
@@ -8145,6 +8241,7 @@ function nextLesson() {
     const nextIncomplete = lessons[state.currentLesson].tasks.findIndex((_, idx) => !completed.has(idx));
     state.taskIndex = nextIncomplete >= 0 ? nextIncomplete : 0;
     renderLesson();
+    saveState();
   }
 }
 
@@ -8230,7 +8327,7 @@ function updateXPBar() {
 // TABS & PANEL
 // ============================================================
 function showTab(tab) {
-  ['lessons', 'adventure', 'challenges', 'quiz', 'achievements', 'glossary'].forEach(t => {
+  ['lessons', 'adventure', 'challenges', 'quiz', 'achievements', 'glossary', 'save'].forEach(t => {
     document.getElementById('panel-' + t).style.display = (t === tab) ? 'block' : 'none';
     document.querySelectorAll(`.panel-tabs button[data-tab="${t}"]`).forEach(b => b.classList.toggle('active', t === tab));
   });
@@ -8281,7 +8378,7 @@ function loadState() {
   try {
     const raw = localStorage.getItem('terminalAcademy');
     if (!raw) return false;
-    restoreSaveObject(JSON.parse(raw));
+    restoreSaveObject(checkSave(JSON.parse(raw), false).clean);
     return true;
   } catch(e) { return false; }
 }
@@ -8290,6 +8387,9 @@ function loadState() {
 setInterval(saveState, 10000);
 window.addEventListener('beforeunload', saveState);
 window.addEventListener('pagehide', saveState);
+// Page close isn't dependable everywhere, so also save when the page goes to the background and after any click.
+document.addEventListener('visibilitychange', () => { if (document.hidden) saveState(); });
+document.addEventListener('click', () => setTimeout(saveState, 0));
 
 // ============================================================
 // ADVENTURE MODE — "The Ghost in the Machine"
@@ -9057,6 +9157,462 @@ function answerQuiz(choice) {
 }
 
 // ============================================================
+// SAVE CHECKING
+// ============================================================
+// A save can come from anywhere: another device, a stranger's file, or another site on this origin, since
+// github.io pages share storage. Nothing from one is trusted. Only known fields are copied, each checked for
+// type and range, so everything that reaches the page is a number from here or text that gets escaped later.
+const SAVE_MAX_CHARS = 4000000; // about what browser storage holds, so a bigger save couldn't be kept anyway
+const SAVE_MAX_NODES = 20000;
+const SAVE_MAX_DEPTH = 40;
+const SAVE_PERMISSIONS = /^[r-][w-][xsS-][r-][w-][xsS-][r-][w-][xtT-]$/;
+const SAVE_VAR_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const SAVE_CMD_NAME = /^[^\s'"<>|&;()`$\\]{1,100}$/;
+
+class SaveProblem extends Error {}
+
+function isPlainRecord(v) { return v !== null && typeof v === 'object' && !Array.isArray(v); }
+
+function checkText(v, what, max) {
+  if (typeof v !== 'string') throw new SaveProblem(`${what} isn't text.`);
+  if (v.length > max) throw new SaveProblem(`${what} is too long.`);
+  return v;
+}
+
+function checkFileName(name) {
+  if (name === '__proto__' || !name || name === '.' || name === '..' || name.length > 255 || /[/\x00]/.test(name)) {
+    throw new SaveProblem('A file name in it is not allowed.');
+  }
+}
+
+// Copies one file, folder, or link, keeping only the fields the game writes.
+function checkFsNode(node, depth, budget) {
+  if (!isPlainRecord(node)) throw new SaveProblem('A file entry is damaged.');
+  if (depth > SAVE_MAX_DEPTH) throw new SaveProblem('Its folders are nested too deeply.');
+  if (++budget.nodes > SAVE_MAX_NODES) throw new SaveProblem('It holds too many files.');
+  const permissions = node.permissions === undefined ? 'rw-r--r--' : node.permissions;
+  if (typeof permissions !== 'string' || !SAVE_PERMISSIONS.test(permissions)) throw new SaveProblem('A file has invalid permissions.');
+  const out = { type: node.type, permissions };
+  if (node.owner !== undefined) out.owner = checkText(node.owner, 'A file owner', 4096);
+  if (node.group !== undefined) out.group = checkText(node.group, 'A file group', 4096);
+  if (node.type === 'dir') {
+    if (!isPlainRecord(node.children)) throw new SaveProblem('A folder is damaged.');
+    out.children = {};
+    for (const name of Object.keys(node.children)) {
+      checkFileName(name);
+      out.children[name] = checkFsNode(node.children[name], depth + 1, budget);
+    }
+  } else if (node.type === 'symlink') {
+    out.target = checkText(node.target, 'A link target', 4096);
+  } else if (node.type === 'file') {
+    out.content = node.content === undefined ? '' : checkText(node.content, 'A file', SAVE_MAX_CHARS);
+    if (node.size !== undefined) {
+      if (!Number.isSafeInteger(node.size) || node.size < 0) throw new SaveProblem('A file has an invalid size.');
+      out.size = node.size;
+    }
+    if (node.fifo !== undefined) out.fifo = node.fifo === true;
+    if (node.original !== undefined) out.original = checkText(node.original, 'A compressed file', SAVE_MAX_CHARS);
+    if (node.originalPerms !== undefined) {
+      if (typeof node.originalPerms !== 'string' || !SAVE_PERMISSIONS.test(node.originalPerms)) throw new SaveProblem('A file has invalid permissions.');
+      out.originalPerms = node.originalPerms;
+    }
+    if (node.archive !== undefined) {
+      if (!Array.isArray(node.archive)) throw new SaveProblem('An archive is damaged.');
+      out.archive = node.archive.map(e => {
+        if (!isPlainRecord(e)) throw new SaveProblem('An archive is damaged.');
+        return { name: checkText(e.name, 'An archive entry', 4096), node: checkFsNode(e.node, depth + 1, budget) };
+      });
+    }
+    if (node.listing !== undefined) {
+      if (!Array.isArray(node.listing) || node.listing.length > SAVE_MAX_NODES) throw new SaveProblem('An archive is damaged.');
+      out.listing = node.listing.map(s => checkText(s, 'An archive entry', 4096));
+    }
+  } else {
+    throw new SaveProblem('A file entry is damaged.');
+  }
+  return out;
+}
+
+// Returns { clean, problems }. clean holds only what passed. An import is refused if problems isn't empty; a save
+// already in this browser loads what passed, so one bad field doesn't cost someone their whole game.
+function checkSave(raw, fromElsewhere) {
+  const problems = [];
+  const clean = {};
+  if (!isPlainRecord(raw)) return { clean, problems: ['There is no save inside it.'] };
+
+  const attempt = (key, fn) => {
+    if (raw[key] === undefined) return;
+    try {
+      const v = fn(raw[key]);
+      if (v !== undefined) clean[key] = v;
+    } catch (e) {
+      if (!(e instanceof SaveProblem) && !(e instanceof RangeError)) throw e;
+      problems.push(e instanceof SaveProblem ? e.message : `${key} is nested too deeply.`);
+    }
+  };
+  const num = (key, min, max) => attempt(key, v => {
+    if (!Number.isInteger(v) || v < min || v > max) throw new SaveProblem(`${key} is not a valid number.`);
+    return v;
+  });
+  const bool = key => attempt(key, v => {
+    if (typeof v !== 'boolean') throw new SaveProblem(`${key} is not true or false.`);
+    return v;
+  });
+  // Lists of whole numbers in a range. Anything out of range is dropped: the course may have changed since the save.
+  const indexList = (v, what, count) => {
+    if (!Array.isArray(v) || v.length > 100000) throw new SaveProblem(`${what} is damaged.`);
+    return v.map(i => {
+      if (!Number.isInteger(i)) throw new SaveProblem(`${what} is damaged.`);
+      return i;
+    }).filter(i => i >= 0 && i < count);
+  };
+  const textList = (key, maxItems, maxLen, allowed) => attempt(key, v => {
+    if (!Array.isArray(v) || v.length > maxItems) throw new SaveProblem(`${key} is damaged.`);
+    const list = v.map(s => checkText(s, key, maxLen));
+    return allowed ? list.filter(s => allowed.has(s)) : list;
+  });
+
+  attempt('fs', v => {
+    if (!isPlainRecord(v)) throw new SaveProblem('Its files are damaged.');
+    const root = checkFsNode(v['/'], 0, { nodes: 0 });
+    const ownDir = (node, name) => node && node.type === 'dir' && own(node.children, name) && node.children[name].type === 'dir' ? node.children[name] : null;
+    if (root.type !== 'dir' || !ownDir(ownDir(root, 'home'), 'player') || !ownDir(root, 'dev')) throw new SaveProblem('Its files are missing the home folder.');
+    return { '/': root };
+  });
+  const dirInSave = path => {
+    if (!clean.fs) return true; // no files in this save, so it will start from the starter files
+    const node = getNode(clean.fs, path);
+    return !!node && node.type === 'dir';
+  };
+  const pathField = key => attempt(key, v => {
+    checkText(v, key, 4096);
+    return v.startsWith('/') && resolvePath('/', v) === v && dirInSave(v) ? v : undefined;
+  });
+  pathField('cwd');
+  pathField('prevDir');
+
+  num('xp', 0, 100000000);
+  num('level', 1, 100000);
+  num('commandCount', 0, 1000000000);
+  attempt('currentLesson', v => {
+    if (!Number.isInteger(v)) throw new SaveProblem('currentLesson is not a valid number.');
+    return v >= 0 && v < lessons.length ? v : undefined;
+  });
+  attempt('completedLessons', v => indexList(v, 'completedLessons', lessons.length));
+  attempt('completedTasks', v => {
+    if (!isPlainRecord(v)) throw new SaveProblem('completedTasks is damaged.');
+    const out = {};
+    for (const k of Object.keys(v)) {
+      const lesson = /^\d+$/.test(k) ? lessons[parseInt(k)] : null;
+      if (lesson) out[parseInt(k)] = indexList(v[k], 'completedTasks', lesson.tasks.length);
+    }
+    return out;
+  });
+  textList('achievements', 1000, 100, new Set(achievementDefs.map(a => a.id)));
+  textList('history', 1000, 100000);
+  textList('dirsVisited', 20000, 4096);
+  textList('filesRead', 20000, 4096);
+  textList('manPagesRead', 5000, 200);
+  textList('shortcutsLearned', 1000, 100);
+  textList('claudeFeaturesExplored', 1000, 100);
+  textList('warpFeaturesExplored', 1000, 100);
+  textList('macosCommandsUsed', 1000, 100);
+  textList('modernToolsUsed', 1000, 100);
+  textList('cronJobs', 1000, 4096);
+
+  attempt('envVars', v => {
+    if (!isPlainRecord(v)) throw new SaveProblem('envVars is damaged.');
+    const out = {};
+    for (const k of Object.keys(v)) {
+      const text = checkText(v[k], 'A variable', 100000);
+      if (SAVE_VAR_NAME.test(k)) out[k] = text;
+    }
+    return out;
+  });
+  attempt('arrays', v => {
+    if (!isPlainRecord(v)) throw new SaveProblem('arrays is damaged.');
+    const out = {};
+    for (const k of Object.keys(v)) {
+      if (!SAVE_VAR_NAME.test(k) || k === '__proto__') continue;
+      const a = v[k];
+      if (Array.isArray(a)) out[k] = a.map(s => checkText(s, 'An array value', 100000));
+      else if (isPlainRecord(a)) {
+        out[k] = {};
+        for (const key of Object.keys(a)) if (key !== '__proto__') out[k][key] = checkText(a[key], 'An array value', 100000);
+      } else throw new SaveProblem('arrays is damaged.');
+    }
+    return out;
+  });
+  // Aliases and shell functions change what ordinary commands do, so they only come from this browser.
+  // A save from elsewhere never brings them along.
+  if (!fromElsewhere) {
+    for (const key of ['aliases', 'functions']) {
+      attempt(key, v => {
+        if (!isPlainRecord(v)) throw new SaveProblem(`${key} is damaged.`);
+        const out = {};
+        for (const k of Object.keys(v)) {
+          const text = checkText(v[k], key, 100000);
+          if (SAVE_CMD_NAME.test(k) && k !== '__proto__') out[k] = text;
+        }
+        return out;
+      });
+    }
+  }
+  attempt('clipboard', v => checkText(v, 'The clipboard', SAVE_MAX_CHARS));
+  attempt('venv', v => {
+    if (v === null) return null;
+    checkText(v, 'venv', 200);
+    return SAVE_CMD_NAME.test(v) ? v : undefined;
+  });
+  attempt('git', v => {
+    if (v === null) return null;
+    if (!isPlainRecord(v) || !Array.isArray(v.branches) || !Array.isArray(v.staged) || !Array.isArray(v.tracked) || !Array.isArray(v.commits)) throw new SaveProblem('Its git history is damaged.');
+    return {
+      root: checkText(v.root, 'The git folder', 4096),
+      branch: checkText(v.branch, 'A git branch', 500),
+      branches: v.branches.map(s => checkText(s, 'A git branch', 500)),
+      staged: v.staged.map(s => checkText(s, 'A git file', 4096)),
+      tracked: v.tracked.map(s => checkText(s, 'A git file', 4096)),
+      commits: v.commits.map(c => {
+        if (!isPlainRecord(c) || typeof c.hash !== 'string' || !/^[0-9a-f]{7,64}$/.test(c.hash)) throw new SaveProblem('Its git history is damaged.');
+        return { hash: c.hash, msg: checkText(c.msg, 'A commit message', 20000), date: checkText(c.date, 'A commit date', 100) };
+      }),
+    };
+  });
+
+  bool('advStarted');
+  attempt('advCurrentQuest', v => {
+    if (!Number.isInteger(v)) throw new SaveProblem('advCurrentQuest is not a valid number.');
+    return v >= 0 && v < adventureQuests.length ? v : undefined;
+  });
+  textList('advCompletedQuests', 1000, 100, new Set(adventureQuests.map(q => q.id)));
+  attempt('advQuestProgress', v => {
+    if (!isPlainRecord(v)) throw new SaveProblem('advQuestProgress is damaged.');
+    const out = {};
+    for (const quest of adventureQuests) if (own(v, quest.id)) out[quest.id] = indexList(v[quest.id], 'advQuestProgress', quest.objectives.length);
+    return out;
+  });
+  attempt('challengeCompleted', v => {
+    if (!isPlainRecord(v)) throw new SaveProblem('challengeCompleted is damaged.');
+    const out = {};
+    for (const diff of Object.keys(challenges)) if (own(v, diff)) out[diff] = indexList(v[diff], 'challengeCompleted', challenges[diff].length);
+    return out;
+  });
+  num('challengeTotalCompleted', 0, 100000000);
+  num('challengeBestStreak', 0, 100000000);
+  num('challengeDailyStreak', 0, 100000000);
+  attempt('challengeLastDailyDate', v => {
+    if (v === null) return null;
+    checkText(v, 'challengeLastDailyDate', 100);
+    return isNaN(new Date(v).getTime()) ? undefined : v;
+  });
+  num('quizAllTimeCorrect', 0, 100000000);
+  num('quizAllTimeTotal', 0, 100000000);
+  attempt('quizSessionHistory', v => {
+    if (!isPlainRecord(v)) throw new SaveProblem('quizSessionHistory is damaged.');
+    const out = {};
+    for (const cat of Object.keys(quizQuestions)) {
+      if (!own(v, cat)) continue;
+      const h = v[cat];
+      if (!isPlainRecord(h) || !Number.isInteger(h.correct) || !Number.isInteger(h.total) || h.correct < 0 || h.total < 0 || h.correct > 100000000 || h.total > 100000000) throw new SaveProblem('quizSessionHistory is damaged.');
+      out[cat] = { correct: h.correct, total: h.total };
+    }
+    return out;
+  });
+  return { clean, problems };
+}
+
+// ============================================================
+// MOVING A SAVE BETWEEN DEVICES
+// ============================================================
+// All of this happens in this page. A file goes to the Downloads folder and a code goes to the clipboard, and
+// nothing is uploaded anywhere: the page's security policy doesn't even allow it to make a connection.
+const SAVE_APP = 'terminal-academy';
+const SAVE_VERSION = 1;
+let pendingImport = null;
+
+function currentSaveJson() {
+  const save = buildSaveObject();
+  delete save.aliases; // these never load from a save, so they aren't sent along either
+  delete save.functions;
+  return JSON.stringify({ app: SAVE_APP, saveVersion: SAVE_VERSION, exportedAt: new Date().toISOString(), save });
+}
+
+function setSaveStatus(message, isError) {
+  const el = document.getElementById('save-status');
+  el.textContent = message;
+  el.style.color = isError ? 'var(--red)' : 'var(--green)';
+}
+
+function downloadSave() {
+  const blob = new Blob([currentSaveJson()], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `terminal-academy-save-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  setSaveStatus('Save file downloaded. Open this page on your other device and load it there.');
+}
+
+function bytesToBase64Url(bytes) {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode(...bytes.subarray(i, i + 8192));
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function base64UrlToBytes(text) {
+  const bin = atob(text.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from(bin, c => c.charCodeAt(0));
+}
+
+// Reads a stream to the end, stopping as soon as it's bigger than any real save. A small code that
+// decompresses into gigabytes stops here.
+async function readLimited(stream) {
+  const reader = stream.getReader();
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.length;
+    if (total > SAVE_MAX_CHARS * 2) {
+      reader.cancel().catch(() => {});
+      throw new SaveProblem('It is too big to be a save.');
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const c of chunks) { out.set(c, at); at += c.length; }
+  return out;
+}
+
+async function makeSaveCode() {
+  const bytes = new TextEncoder().encode(currentSaveJson());
+  try {
+    const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+    return 'TA1.' + bytesToBase64Url(await readLimited(stream));
+  } catch (e) {
+    return 'TA0.' + bytesToBase64Url(bytes); // an older browser: longer, but it still works
+  }
+}
+
+async function showSaveCode() {
+  const out = document.getElementById('save-code-out');
+  const code = await makeSaveCode();
+  out.value = code;
+  out.style.display = 'block';
+  document.getElementById('save-copy-btn').style.display = 'inline-block';
+  setSaveStatus(`Your code is ready: ${code.length.toLocaleString('en')} characters. Copy it and send it to yourself.`);
+}
+
+async function copySaveCode() {
+  const out = document.getElementById('save-code-out');
+  try {
+    await navigator.clipboard.writeText(out.value);
+  } catch (e) {
+    out.focus();
+    out.select();
+    if (!document.execCommand('copy')) {
+      setSaveStatus('Your browser blocked copying. Select the code and copy it yourself.', true);
+      return;
+    }
+  }
+  setSaveStatus('Code copied. Paste it into this page on your other device.');
+}
+
+// Turns a pasted code or a file's text into a checked save. Throws SaveProblem with a message for the learner.
+async function readSaveText(text) {
+  const trimmed = String(text).trim();
+  if (!trimmed) throw new SaveProblem('Paste a save code or choose a save file first.');
+  if (trimmed.length > SAVE_MAX_CHARS * 2) throw new SaveProblem('It is too big to be a save.');
+  let json = trimmed;
+  if (/^TA[01]\./.test(trimmed)) {
+    let bytes;
+    try { bytes = base64UrlToBytes(trimmed.slice(4)); }
+    catch (e) { throw new SaveProblem("That code is damaged. Copy the whole thing and try again."); }
+    if (trimmed[2] === '1') {
+      if (typeof DecompressionStream === 'undefined') throw new SaveProblem('This browser is too old to read save codes. Use a save file instead.');
+      try {
+        bytes = await readLimited(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw')));
+      } catch (e) {
+        if (e instanceof SaveProblem) throw e;
+        throw new SaveProblem('That code is damaged. Copy the whole thing and try again.');
+      }
+    }
+    try { json = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+    catch (e) { throw new SaveProblem('That code is damaged. Copy the whole thing and try again.'); }
+  }
+  if (json.length > SAVE_MAX_CHARS) throw new SaveProblem('It is too big to be a save.');
+  let wrapper;
+  try { wrapper = JSON.parse(json); }
+  catch (e) { throw new SaveProblem("That isn't a Terminal Academy save."); }
+  if (!isPlainRecord(wrapper) || wrapper.app !== SAVE_APP || !Number.isInteger(wrapper.saveVersion) || wrapper.saveVersion < 1) {
+    throw new SaveProblem("That isn't a Terminal Academy save.");
+  }
+  if (wrapper.saveVersion > SAVE_VERSION) throw new SaveProblem('That save came from a newer version. Reload this page and try again.');
+  const { clean, problems } = checkSave(wrapper.save, true);
+  if (problems.length) throw new SaveProblem(`That save can't be loaded. ${problems[0]}`);
+  if (!clean.fs) throw new SaveProblem("That save can't be loaded. Its files are missing.");
+  return clean;
+}
+
+async function checkImport(text) {
+  document.getElementById('save-confirm').style.display = 'none';
+  pendingImport = null;
+  let clean;
+  try {
+    clean = await readSaveText(text);
+  } catch (e) {
+    if (!(e instanceof SaveProblem)) console.warn('Could not read save:', e);
+    setSaveStatus(e instanceof SaveProblem ? e.message : "That save can't be loaded.", true);
+    return;
+  }
+  pendingImport = clean;
+  const chapters = (clean.completedLessons || []).length;
+  const quests = (clean.advCompletedQuests || []).length;
+  document.getElementById('save-summary').textContent =
+    `This save: ${chapters} of ${lessons.length} chapters done, on chapter ${(clean.currentLesson || 0) + 1}, level ${clean.level || 1}, ${quests} of ${adventureQuests.length} quests solved. Loading it replaces the progress in this browser. Download your current save first if you want to keep it. Aliases and shell functions stay behind, because a save can't change what commands do.`;
+  document.getElementById('save-confirm').style.display = 'block';
+  setSaveStatus('That save looks good. Nothing has changed yet.');
+}
+
+function checkSaveCode() {
+  checkImport(document.getElementById('save-code-in').value);
+}
+
+function loadSaveFile(input) {
+  const f = input.files && input.files[0];
+  input.value = '';
+  if (!f) return;
+  if (f.size > SAVE_MAX_CHARS * 2) { setSaveStatus('It is too big to be a save.', true); return; }
+  f.text().then(checkImport, () => setSaveStatus("That file couldn't be read.", true));
+}
+
+function cancelImport() {
+  pendingImport = null;
+  document.getElementById('save-confirm').style.display = 'none';
+  setSaveStatus('Nothing changed.');
+}
+
+function applyImport() {
+  if (!pendingImport) return;
+  const before = gameStarted;
+  gameStarted = false; // the page-close save must not write the old game back over this one
+  try {
+    localStorage.setItem('terminalAcademy', JSON.stringify(pendingImport));
+  } catch (e) {
+    gameStarted = before;
+    setSaveStatus("This browser wouldn't store it, so nothing changed. Storage may be full or turned off.", true);
+    return;
+  }
+  location.reload();
+}
+
+// ============================================================
 // SAVE DATA
 // ============================================================
 function buildSaveObject() {
@@ -9101,7 +9657,8 @@ function restoreSaveObject(save) {
   if (!save) return;
   if (save.fs && save.fs['/']) state.fs = save.fs;
   state.cwd = save.cwd || '/home/player';
-  if (!getNode(state.fs, state.cwd)) state.cwd = '/home/player';
+  const cwdNode = getNode(state.fs, state.cwd);
+  if (!cwdNode || cwdNode.type !== 'dir') state.cwd = '/home/player';
   state.prevDir = save.prevDir || state.cwd;
   state.xp = save.xp || 0;
   state.level = save.level || 1;
