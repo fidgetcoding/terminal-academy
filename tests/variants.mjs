@@ -263,7 +263,8 @@ for (const [name, view] of [['desktop', { viewport: { width: 1440, height: 900 }
   await page.locator('#cmd-input').focus();
   const long = 'cat documents/projects/data/sales.csv | cut -d "," -f 2 | sort | uniq';
   await page.keyboard.type(long);
-  await page.waitForTimeout(50);
+  // The overlay follows on the next frame, which can take a moment on a slow machine
+  await page.waitForFunction(() => Math.abs(document.getElementById('syntax-overlay').scrollLeft - document.getElementById('cmd-input').scrollLeft) <= 1, null, { timeout: 2000 }).catch(() => {});
   const m = await page.evaluate(() => {
     const o = document.getElementById('syntax-overlay'), i = document.getElementById('cmd-input');
     return { text: o.textContent, value: i.value, oScroll: o.scrollLeft, iScroll: i.scrollLeft, iw: i.getBoundingClientRect().width, oRight: o.getBoundingClientRect().right, winW: window.innerWidth, page: document.documentElement.scrollWidth };
