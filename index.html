@@ -1514,7 +1514,7 @@ const lessons = [
   // CHAPTER 49: CURL POWER USER
   {
     chapter: 49, title: 'Curl Power User',
-    desc: '<span class="highlight">curl</span> is the Swiss Army knife for HTTP requests. It supports every protocol and is essential for API work.\n\nHTTP methods:\n• <span class="code">curl URL</span> — GET request (default)\n• <span class="code">curl -X POST -d \'{"key":"val"}\' URL</span> — POST with data\n• <span class="code">curl -X PUT URL</span> — PUT request\n• <span class="code">curl -X DELETE URL</span> — DELETE request\n\nUseful flags:\n• <span class="code">-H "Content-Type: application/json"</span> — set headers\n• <span class="code">-o file</span> — save output to file\n• <span class="code">-s</span> — silent mode (no progress bar)\n• <span class="code">-L</span> — follow redirects\n• <span class="code">-b cookies.txt</span> — send cookies\n\nPro tip: <span class="code">curl -s URL | jq .</span> — pipe JSON responses to jq for pretty-printing!',
+    desc: '<span class="highlight">curl</span> is the Swiss Army knife for HTTP requests. It speaks dozens of protocols and is essential for API work.\n\nHTTP methods:\n• <span class="code">curl URL</span> — GET request (default)\n• <span class="code">curl -X POST -d \'{"key":"val"}\' URL</span> — POST with data\n• <span class="code">curl -X PUT URL</span> — PUT request\n• <span class="code">curl -X DELETE URL</span> — DELETE request\n\nUseful flags:\n• <span class="code">-H "Content-Type: application/json"</span> — set headers\n• <span class="code">-o file</span> — save output to file\n• <span class="code">-s</span> — silent mode (no progress bar)\n• <span class="code">-L</span> — follow redirects\n• <span class="code">-b cookies.txt</span> — send cookies\n\nPro tip: <span class="code">curl -s URL | jq .</span> — pipe JSON responses to jq for pretty-printing!',
     tasks: [
       { text:'Make a POST request: <code>curl -X POST -d \'{"name":"test"}\' https://api.example.com</code>', hint:'Type: curl -X POST with -d for data — sends data to the server', validate: c => usesCmd(c, 'curl') && c.cmd.includes('POST') },
       { text:'Add a custom header: <code>curl -H "Authorization: Bearer token" https://api.example.com</code>', hint:'Type: curl -H "Header: value" URL — adds a custom HTTP header', validate: c => usesCmd(c, 'curl') && c.cmd.includes('-H') },
@@ -1605,12 +1605,12 @@ const lessons = [
   // CHAPTER 56: PARALLEL EXECUTION
   {
     chapter: 56, title: 'Parallel Execution',
-    desc: 'Run multiple commands simultaneously for faster results:\n\n<span class="highlight">Background jobs:</span>\n• <span class="code">command &</span> — run in background\n• <span class="code">wait</span> — wait for all background jobs to finish\n• <span class="code">jobs</span> — list background jobs\n\n<span class="highlight">GNU Parallel:</span>\n• <span class="code">parallel command ::: arg1 arg2 arg3</span>\n• Distributes work across CPU cores\n\n<span class="highlight">xargs -P:</span>\n• <span class="code">find . -name "*.jpg" | xargs -P 4 convert</span>\n• <span class="code">-P 4</span> runs up to 4 processes at once\n\nParallel downloads: <span class="code">cat urls.txt | xargs -P 8 -I {} curl -O {}</span>',
+    desc: 'Run multiple commands simultaneously for faster results:\n\n<span class="highlight">Background jobs:</span>\n• <span class="code">command &</span> — run in background\n• <span class="code">wait</span> — wait for all background jobs to finish\n• <span class="code">jobs</span> — list background jobs\n\n<span class="highlight">GNU Parallel:</span>\n• <span class="code">parallel command ::: arg1 arg2 arg3</span>\n• Distributes work across CPU cores\n\n<span class="highlight">xargs -P:</span>\n• <span class="code">find . -name "*.jpg" | xargs -n 1 -P 4 convert</span>\n• <span class="code">-n 1 -P 4</span> gives each process one file and runs up to 4 at once\n\nParallel downloads: <span class="code">cat urls.txt | xargs -P 8 -I {} curl -O {}</span>',
     tasks: [
       { text:'Run a command in the background: <code>sleep 10 &</code>', hint:'Type: sleep 10 & — the & puts it in the background', validate: c => c.cmd.includes('&') },
       { text:'Wait for background jobs: <code>wait</code>', hint:'Type: wait — blocks until all background jobs complete', validate: c => c.cmd === 'wait' },
       { text:'List background jobs: <code>jobs</code>', hint:'Type: jobs — shows all running and stopped background jobs', validate: c => c.cmd === 'jobs' },
-      { text:'Use xargs with parallelism: <code>echo "a b c" | xargs -P 3 echo</code>', hint:'Type a command using xargs -P for parallel execution', validate: c => c.cmd.includes('xargs') && c.cmd.includes('-P') },
+      { text:'Use xargs with parallelism: <code>echo "a b c" | xargs -n 1 -P 3 echo</code>', hint:'Type a command using xargs -P for parallel execution', validate: c => c.cmd.includes('xargs') && c.cmd.includes('-P') },
       { text:'Use GNU parallel: <code>parallel echo ::: 1 2 3 4</code>', hint:'Type: parallel echo ::: 1 2 3 4 — runs echo on each argument in parallel', validate: c => usesCmd(c, 'parallel') },
     ],
     xp: 90,
@@ -4823,7 +4823,7 @@ Warp also supports compact mode for smaller screens.</span>`
   <span class="highlight">Cmd+[/]</span>        — switch between panes
   <span class="highlight">Cmd+P</span>          — command palette (search anything!)
   <span class="highlight">Cmd+K</span>          — clear terminal (better than Ctrl+L)
-  <span class="highlight">Cmd+Shift+F</span>    — search across all terminal output
+  <span class="highlight">Cmd+F</span>          — search the terminal output
   <span class="highlight">Ctrl+R</span>         — search command history
 
 <span class="warning">Productivity features:</span>
@@ -4831,7 +4831,7 @@ Warp also supports compact mode for smaller screens.</span>`
   • <span class="highlight">Sticky header</span> — see the running command as you scroll
   • <span class="highlight">Input editor</span> — multi-line editing with syntax highlighting
   • <span class="highlight">Completions</span> — rich autocomplete with descriptions
-  • <span class="highlight">Markdown rendering</span> — man pages and help text look beautiful
+  • <span class="highlight">Markdown viewer</span> — open .md files right in the terminal
 
 <span class="dim">Pro tip: Cmd+P (command palette) is Warp\'s Swiss Army knife.
 Search commands, files, workflows, settings — all in one place.</span>`
@@ -5927,7 +5927,7 @@ function cmdMake(args) {
 
 <span class="warning">Basic syntax:</span>
   target: dependencies
-  \\tcommand
+	command   (that indent must be a real Tab)
 
 <span class="warning">Example Makefile:</span>
 <span class="dim">CC = gcc
@@ -5936,13 +5936,13 @@ CFLAGS = -Wall -O2
 all: myapp
 
 myapp: main.o utils.o
-\\t$(CC) $(CFLAGS) main.o utils.o -o myapp
+	$(CC) $(CFLAGS) main.o utils.o -o myapp
 
 main.o: main.c
-\\t$(CC) $(CFLAGS) -c main.c
+	$(CC) $(CFLAGS) -c main.c
 
 clean:
-\\trm -f *.o myapp
+	rm -f *.o myapp
 
 .PHONY: all clean</span>
 
@@ -6017,7 +6017,7 @@ function cmdGpg(args) {
     const e = writeRedirect(target + '.gpg', '[binary: encrypted data]', false);
     if (e) return e;
     getNode(state.fs, resolvePath(state.cwd, target + '.gpg')).original = f.content;
-    return `<span class="dim">Enter passphrase: ****\nCreated ${escapeHtml(target)}.gpg, encrypted with AES-256. Keep your passphrase safe! Real gpg prints nothing when it works.</span>`;
+    return `<span class="dim">Enter passphrase: ****\nCreated ${escapeHtml(target)}.gpg, encrypted with your passphrase. Keep it safe! Real gpg prints nothing when it works.</span>`;
   }
   if (flags.d || flags.decrypt) {
     if (!target) return '<span class="error">gpg: missing file name</span>';
@@ -7090,8 +7090,12 @@ function cmdGh(args) {
       if (args[1] === 'run') return `<span class="success">✓ Created workflow dispatch event for ${args[2] || 'deploy.yml'}</span>`;
       if (args[1] === 'view') return `<span class="info">Deploy to Production</span>\nTriggered via workflow_dispatch\n\n<span class="success">✓ build (12s)</span>\n<span class="success">✓ test (45s)</span>\n<span class="success">✓ deploy (30s)</span>`;
       return '<span class="dim">Usage: gh workflow run/view/list</span>';
-    case 'api':
-      return `<span class="dim">{\n  "login": "player",\n  "name": "Terminal Academy Student",\n  "public_repos": 12,\n  "followers": 42\n}</span>`;
+    case 'api': {
+      const path = args[1] || 'user';
+      const repo = /^\/?repos\/([^/]+)\/([^/]+)/.exec(path);
+      if (repo) return `{\n  "name": "${repo[2]}",\n  "full_name": "${repo[1]}/${repo[2]}",\n  "private": false,\n  "default_branch": "main",\n  "stargazers_count": 42\n}`;
+      return '{\n  "login": "player",\n  "name": "Terminal Academy Student",\n  "public_repos": 12,\n  "followers": 42\n}';
+    }
     case 'auth':
       return '<span class="success">✓ Logged in to github.com as player</span>';
     default:
