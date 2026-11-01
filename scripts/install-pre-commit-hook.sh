@@ -16,6 +16,11 @@ if ! command -v gitleaks &>/dev/null; then
 fi
 
 mkdir -p "$REPO_ROOT/.git/hooks"
+# Keep a hook that isn't ours rather than overwriting it.
+if [ -e "$HOOK" ] && ! grep -q 'gitleaks scan on staged content' "$HOOK"; then
+  mv "$HOOK" "$HOOK.bak"
+  echo "⚠️  Existing pre-commit hook saved as $HOOK.bak. It will not run until you merge it back." >&2
+fi
 cat > "$HOOK" <<'HOOK_EOF'
 #!/usr/bin/env bash
 # pre-commit — gitleaks scan on staged content. Block if any secret detected.
@@ -23,8 +28,9 @@ cat > "$HOOK" <<'HOOK_EOF'
 set -euo pipefail
 
 if ! command -v gitleaks &>/dev/null; then
-  echo "⚠️  gitleaks missing — skipping pre-commit secret scan." >&2
-  exit 0
+  echo "🚨 gitleaks is not installed, so this commit can't be scanned for secrets. Commit BLOCKED." >&2
+  echo "   Install it (macOS: brew install gitleaks), or bypass with: git commit --no-verify" >&2
+  exit 1
 fi
 
 if ! gitleaks protect --staged --no-banner --redact -v 2>&1; then

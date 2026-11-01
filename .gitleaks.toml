@@ -1,32 +1,10 @@
 # .gitleaks.toml — extends gitleaks default rules
-# Generated 2026-04-25 by cross-repo secret-scrub deployment.
 
 [extend]
 useDefault = true
 
 [[allowlists]]
-description = "Redacted-token markers from prior history scrubs"
-regexes = [
-  'gho_REDACTED-AUDIT-2026-04-25',
-  'ntn_REDACTED-AUDIT-2026-04-25',
-  'MORGEN-REDACTED-AUDIT-2026-04-25',
-  'gho_REDACTED-W2-FIX-OUTPUT',
-  'ntn_REDACTED-W2-FIX-OUTPUT',
-  'MORGEN-REDACTED-W2-FIX-OUTPUT',
-]
-
-[[allowlists]]
-description = "Placeholder strings used in templates"
-regexes = [
-  'REPLACE_WITH_GITHUB_TOKEN',
-  'REPLACE_WITH_NOTION_TOKEN',
-  'REPLACE_WITH_MORGEN_API_KEY',
-  '\{\{(NOTION_TOKEN|GITHUB_TOKEN|MORGEN_API_KEY|NOTION_DATABASE_ID|W[123]_WORKFLOW_ID)\}\}',
-  '\$\{?[A-Z_]+_(TOKEN|KEY|SECRET|PASSWORD)\}?',
-]
-
-[[allowlists]]
-description = "Supabase ANON key — anon-by-design, RLS-protected, intentionally public client-side"
+description = "Publishable key still in git history from the removed Supabase login. It was public by design and its project no longer exists."
 regexes = [
   'sb_publishable_lqtyf5uWjAqHQCxOr2LlXA_0vuRGalM',
 ]
