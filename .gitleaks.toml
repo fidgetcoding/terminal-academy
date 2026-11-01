@@ -8,3 +8,9 @@ description = "Publishable key still in git history from the removed Supabase lo
 regexes = [
   'sb_publishable_lqtyf5uWjAqHQCxOr2LlXA_0vuRGalM',
 ]
+
+[[allowlists]]
+description = "PostHog project token for the usage counts. It's public by design: it can only send events, and every visitor's browser has it."
+regexes = [
+  'phc_nkB5qDsUnUyyHKkzGJbwNworNCBsar69d3DQbCiVZNbE',
+]
