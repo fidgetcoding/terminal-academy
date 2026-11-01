@@ -5709,6 +5709,7 @@ function handleCommand(raw) {
   validateChallenge(raw);
   // Validate adventure quest
   validateAdventure(raw);
+  saveState();
 }
 
 function escapeHtml(str) {
@@ -6085,49 +6086,18 @@ function showToast(message, type) {
 // ============================================================
 // SAVE / LOAD
 // ============================================================
+// Nothing may be saved until startGame() has loaded the player's progress. Before that, state is still
+// the blank default and saving it would overwrite a returning player's progress.
+let gameStarted = false;
+
 function saveState() {
-  const save = {
-    cwd: state.cwd,
-    xp: state.xp,
-    level: state.level,
-    currentLesson: state.currentLesson,
-    completedLessons: [...state.completedLessons],
-    completedTasks: {},
-    achievements: [...state.achievements],
-    aliases: state.aliases,
-    envVars: state.envVars,
-    commandCount: state.commandCount,
-    history: state.history.slice(-200),
-    // Challenge state
-    challengeCompleted: {},
-    challengeTotalCompleted: challengeState.totalCompleted,
-    challengeBestStreak: challengeState.bestStreak,
-    challengeDailyStreak: challengeState.dailyStreak,
-    challengeLastDailyDate: challengeState.lastDailyDate,
-    // Adventure state
-    advStarted: adventureState.started,
-    advCurrentQuest: adventureState.currentQuest,
-    advCompletedQuests: [...adventureState.completedQuests],
-    advQuestProgress: {},
-    // Quiz state
-    quizAllTimeCorrect: quizState.allTimeCorrect,
-    quizAllTimeTotal: quizState.allTimeTotal,
-    quizSessionHistory: quizState.sessionHistory,
-    // Tracking sets for new achievements
-    macosCommandsUsed: [...(state.macosCommandsUsed || [])],
-    modernToolsUsed: [...(state.modernToolsUsed || [])],
-  };
-  for (const [k, v] of Object.entries(state.completedTasks)) {
-    save.completedTasks[k] = [...v];
+  if (!gameStarted) return;
+  try {
+    localStorage.setItem('terminalAcademy', JSON.stringify(buildSaveObject()));
+    localStorage.setItem('terminalAcademy_ts', String(Date.now()));
+  } catch(e) {
+    console.warn('Could not save progress locally:', e);
   }
-  for (const [k, v] of Object.entries(challengeState.completed)) {
-    save.challengeCompleted[k] = [...v];
-  }
-  for (const [k, v] of Object.entries(adventureState.questProgress)) {
-    save.advQuestProgress[k] = [...v];
-  }
-  localStorage.setItem('terminalAcademy', JSON.stringify(save));
-  localStorage.setItem('terminalAcademy_ts', String(Date.now()));
   debouncedCloudSync();
 }
 
@@ -6135,69 +6105,15 @@ function loadState() {
   try {
     const raw = localStorage.getItem('terminalAcademy');
     if (!raw) return false;
-    const save = JSON.parse(raw);
-    state.cwd = save.cwd || '/home/player';
-    state.xp = save.xp || 0;
-    state.level = save.level || 1;
-    state.currentLesson = save.currentLesson || 0;
-    state.completedLessons = new Set(save.completedLessons || []);
-    state.achievements = new Set(save.achievements || []);
-    state.aliases = save.aliases || {};
-    state.envVars = { ...state.envVars, ...(save.envVars || {}) };
-    state.commandCount = save.commandCount || 0;
-    state.history = save.history || [];
-    if (save.completedTasks) {
-      for (const [k, v] of Object.entries(save.completedTasks)) {
-        state.completedTasks[k] = new Set(v);
-      }
-    }
-    // Restore challenge state
-    if (save.challengeCompleted) {
-      for (const [k, v] of Object.entries(save.challengeCompleted)) {
-        challengeState.completed[k] = new Set(v);
-      }
-    }
-    challengeState.totalCompleted = save.challengeTotalCompleted || 0;
-    challengeState.bestStreak = save.challengeBestStreak || 0;
-    challengeState.dailyStreak = save.challengeDailyStreak || 0;
-    challengeState.lastDailyDate = save.challengeLastDailyDate || null;
-    // Check if daily streak should reset
-    if (challengeState.lastDailyDate) {
-      const last = new Date(challengeState.lastDailyDate);
-      const now = new Date();
-      const diffDays = Math.floor((now - last) / 86400000);
-      if (diffDays > 1) challengeState.dailyStreak = 0;
-    }
-    // Restore adventure state
-    adventureState.started = save.advStarted || false;
-    adventureState.currentQuest = save.advCurrentQuest || 0;
-    adventureState.completedQuests = new Set(save.advCompletedQuests || []);
-    if (save.advQuestProgress) {
-      for (const [k, v] of Object.entries(save.advQuestProgress)) {
-        adventureState.questProgress[k] = new Set(v);
-      }
-    }
-    // Restore quiz state
-    quizState.allTimeCorrect = save.quizAllTimeCorrect || 0;
-    quizState.allTimeTotal = save.quizAllTimeTotal || 0;
-    quizState.sessionHistory = save.quizSessionHistory || {};
-    // Restore tracking sets
-    state.macosCommandsUsed = new Set(save.macosCommandsUsed || []);
-    state.modernToolsUsed = new Set(save.modernToolsUsed || []);
-    // Restore taskIndex
-    const completed = state.completedTasks[state.currentLesson] || new Set();
-    const lesson = lessons[state.currentLesson];
-    if (lesson) {
-      const nextIncomplete = lesson.tasks.findIndex((_, idx) => !completed.has(idx));
-      state.taskIndex = nextIncomplete >= 0 ? nextIncomplete : 0;
-    }
+    restoreSaveObject(JSON.parse(raw));
     return true;
   } catch(e) { return false; }
 }
 
-// Auto-save every 10 seconds + on page close
+// Auto-save every 10 seconds + on page close (mobile browsers skip beforeunload, so also on pagehide)
 setInterval(saveState, 10000);
 window.addEventListener('beforeunload', saveState);
+window.addEventListener('pagehide', saveState);
 
 // ============================================================
 // ADVENTURE MODE — "The Ghost in the Machine"
@@ -6986,7 +6902,7 @@ function initSupabase() {
       if (session?.user) {
         currentUser = session.user;
         updateUserUI();
-        loadCloudState();
+        if (gameStarted) loadCloudState();
       } else {
         currentUser = null;
         updateUserUI();
@@ -7029,7 +6945,7 @@ function setSyncIndicator(status) {
 
 function showAuthOverlay() {
   if (!cloudSyncEnabled) {
-    showToast('Cloud saves not configured yet. See README for Supabase setup.', 'ach');
+    showToast('Cloud saves are unavailable right now. Progress still saves in this browser.', 'ach');
     return;
   }
   document.getElementById('auth-overlay').classList.remove('hidden');
@@ -7060,7 +6976,7 @@ function playAsGuest() {
 }
 
 async function doLogin() {
-  if (!sb) return;
+  if (!sb) { document.getElementById('auth-error').textContent = 'Cloud login is unavailable right now. You can still play as a guest.'; return; }
   const email = document.getElementById('login-email').value.trim();
   const password = document.getElementById('login-password').value;
   const errEl = document.getElementById('auth-error');
@@ -7096,7 +7012,7 @@ async function doLogin() {
 }
 
 async function doSignup() {
-  if (!sb) return;
+  if (!sb) { document.getElementById('auth-error').textContent = 'Cloud login is unavailable right now. You can still play as a guest.'; return; }
   const name = document.getElementById('signup-name').value.trim();
   const email = document.getElementById('signup-email').value.trim();
   const password = document.getElementById('signup-password').value;
@@ -7162,7 +7078,7 @@ async function doLogout() {
 
 // Cloud save/load
 async function saveCloudState() {
-  if (!sb || !currentUser) return;
+  if (!sb || !currentUser || !gameStarted) return;
   setSyncIndicator('saving');
   try {
     const gameState = buildSaveObject();
@@ -7220,7 +7136,7 @@ async function loadCloudState() {
 
 function buildSaveObject() {
   const save = {
-    cwd: state.cwd, xp: state.xp, level: state.level,
+    fs: state.fs, cwd: state.cwd, prevDir: state.prevDir, xp: state.xp, level: state.level,
     currentLesson: state.currentLesson,
     completedLessons: [...state.completedLessons],
     completedTasks: {},
@@ -7242,6 +7158,12 @@ function buildSaveObject() {
     quizSessionHistory: quizState.sessionHistory,
     macosCommandsUsed: [...(state.macosCommandsUsed || [])],
     modernToolsUsed: [...(state.modernToolsUsed || [])],
+    dirsVisited: [...state.dirsVisited],
+    filesRead: [...state.filesRead],
+    manPagesRead: [...state.manPagesRead],
+    shortcutsLearned: [...state.shortcutsLearned],
+    claudeFeaturesExplored: [...state.claudeFeaturesExplored],
+    warpFeaturesExplored: [...state.warpFeaturesExplored],
   };
   for (const [k, v] of Object.entries(state.completedTasks)) save.completedTasks[k] = [...v];
   for (const [k, v] of Object.entries(challengeState.completed)) save.challengeCompleted[k] = [...v];
@@ -7251,16 +7173,20 @@ function buildSaveObject() {
 
 function restoreSaveObject(save) {
   if (!save) return;
+  if (save.fs && save.fs['/']) state.fs = save.fs;
   state.cwd = save.cwd || '/home/player';
+  if (!getNode(state.fs, state.cwd)) state.cwd = '/home/player';
+  state.prevDir = save.prevDir || state.cwd;
   state.xp = save.xp || 0;
   state.level = save.level || 1;
-  state.currentLesson = save.currentLesson || 0;
+  state.currentLesson = Math.min(Math.max(save.currentLesson || 0, 0), lessons.length - 1);
   state.completedLessons = new Set(save.completedLessons || []);
   state.achievements = new Set(save.achievements || []);
   state.aliases = save.aliases || {};
   state.envVars = { ...state.envVars, ...(save.envVars || {}) };
   state.commandCount = save.commandCount || 0;
   state.history = save.history || [];
+  historyIdx = state.history.length;
   if (save.completedTasks) {
     for (const [k, v] of Object.entries(save.completedTasks)) state.completedTasks[k] = new Set(v);
   }
@@ -7277,11 +7203,19 @@ function restoreSaveObject(save) {
   challengeState.bestStreak = save.challengeBestStreak || 0;
   challengeState.dailyStreak = save.challengeDailyStreak || 0;
   challengeState.lastDailyDate = save.challengeLastDailyDate || null;
+  // A missed day resets the daily streak
+  if (challengeState.lastDailyDate && Math.floor((new Date() - new Date(challengeState.lastDailyDate)) / 86400000) > 1) challengeState.dailyStreak = 0;
   quizState.allTimeCorrect = save.quizAllTimeCorrect || 0;
   quizState.allTimeTotal = save.quizAllTimeTotal || 0;
   quizState.sessionHistory = save.quizSessionHistory || {};
   state.macosCommandsUsed = new Set(save.macosCommandsUsed || []);
   state.modernToolsUsed = new Set(save.modernToolsUsed || []);
+  state.dirsVisited = new Set(save.dirsVisited || ['/home/player']);
+  state.filesRead = new Set(save.filesRead || []);
+  state.manPagesRead = new Set(save.manPagesRead || []);
+  state.shortcutsLearned = new Set(save.shortcutsLearned || []);
+  state.claudeFeaturesExplored = new Set(save.claudeFeaturesExplored || []);
+  state.warpFeaturesExplored = new Set(save.warpFeaturesExplored || []);
   // Restore taskIndex
   const completed = state.completedTasks[state.currentLesson] || new Set();
   const lesson = lessons[state.currentLesson];
@@ -7306,8 +7240,10 @@ function startGame() {
   inputEl.focus();
   state.lessonStartTime = Date.now();
 
-  const hasProgress = loadState();
+  const hasProgress = gameStarted || loadState();
+  gameStarted = true;
 
+  if (terminalEl.children.length) { inputEl.focus(); return; } // already running: logging in mid-game calls this again
   printToTerminal('<span class="info">Welcome to Terminal Academy!</span>', 'info');
   if (hasProgress) {
     printToTerminal('<span class="dim">Progress restored. Picking up where you left off!</span>');
@@ -7344,6 +7280,7 @@ document.getElementById('terminal-pane').addEventListener('click', () => inputEl
         document.getElementById('auth-overlay').classList.add('hidden');
         document.getElementById('welcome-overlay').classList.add('hidden');
         startGame();
+        await loadCloudState();
         return;
       }
     } catch(e) {}
