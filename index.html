@@ -2072,7 +2072,7 @@ function htmlToText(html) {
   let s = String(html == null ? '' : html);
   const noNotes = s.replace(/<span class="dim">[\s\S]*?<\/span>\n?/g, '');
   if (noNotes.replace(/<[^>]*>/g, '').trim()) s = noNotes;
-  return s.replace(/<[^>]*>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  return s.replace(/<[^>]*>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
 }
 
 function pipeText(html) {
@@ -2099,10 +2099,9 @@ function captureCommand(cmd) {
 }
 
 function shellVar(name) {
-  const a = state.arrays[name];
+  const a = own(state.arrays, name) ? state.arrays[name] : null;
   if (Array.isArray(a)) return a[0] === undefined ? '' : a[0];
-  if (state.envVars[name] !== undefined) return state.envVars[name];
-  return '';
+  return own(state.envVars, name) ? state.envVars[name] : '';
 }
 
 function globToRegexSource(glob) {
@@ -2408,13 +2407,14 @@ function finishProcessSubs() {
 }
 
 function assignVar(a) {
+  if (a.name === '__proto__') return;
   if (a.array) {
     if (a.append && Array.isArray(state.arrays[a.name])) state.arrays[a.name].push(...a.array);
     else state.arrays[a.name] = a.array.slice();
     return;
   }
   if (a.key !== undefined) {
-    if (!state.arrays[a.name]) state.arrays[a.name] = /^\d+$/.test(a.key) ? [] : {};
+    if (!own(state.arrays, a.name)) state.arrays[a.name] = /^\d+$/.test(a.key) ? [] : {};
     state.arrays[a.name][a.key] = a.value;
     return;
   }
@@ -2529,7 +2529,7 @@ function runStage(text, stdin) {
   }
   // Aliases expand as text so they can hold pipes
   const first = /^([^\s|&;<>()'"=]+)(.*)$/s.exec(trimmed);
-  if (first && state.aliases[first[1]] && !aliasGuard.has(first[1])) {
+  if (first && own(state.aliases, first[1]) && !aliasGuard.has(first[1])) {
     aliasGuard.add(first[1]);
     try {
       const { out, err } = splitStreams(runList(state.aliases[first[1]] + first[2], stdin));
@@ -2845,15 +2845,18 @@ const commandBins = {bash:'/bin/bash',zsh:'/bin/zsh',ls:'/bin/ls',cat:'/bin/cat'
 const academyOnly = new Set(['shortcut','glossary','help','xp','achievements','exitcode','encoding','benchmark','restore','ansi','colors']);
 
 function commandPath(name) {
-  if (commandBins[name]) return commandBins[name];
+  if (own(commandBins, name)) return commandBins[name];
   return validCommands.has(name) && !academyOnly.has(name) ? '/usr/bin/' + name : null;
 }
+
+// Learner-typed names look things up in plain objects, so "constructor" must not find Object.prototype's.
+function own(obj, key) { return Object.prototype.hasOwnProperty.call(obj, key); }
 
 function runCommand(cmd, args, stdin) {
   state.commandCount++;
   checkAchievement('first_cmd');
   if (state.commandCount >= 100) checkAchievement('centurion');
-  if (state.functions[cmd] !== undefined) {
+  if (own(state.functions, cmd)) {
     const out = callShellFunction(cmd, args);
     if (forcedExit === null) forcedExit = state.lastExit;
     return out;
@@ -2879,7 +2882,7 @@ function runCommand(cmd, args, stdin) {
     case 'read': return cmdRead(args);
     case 'restore': return cmdRestore();
     case 'eval': return runList(args.join(' '), stdin);
-    case 'set': return args.length ? '<span class="dim">set changes how the shell behaves. It matters most inside scripts: see bash examples set.</span>' : Object.entries(state.envVars).map(([k, v]) => `${k}=${escapeHtml(v)}`).join('\n');
+    case 'set': return args.length ? '<span class="dim">set changes how the shell behaves. It matters most inside scripts: see bash examples set.</span>' : Object.entries(state.envVars).map(([k, v]) => `${escapeHtml(k)}=${escapeHtml(v)}`).join('\n');
     case 'unset': for (const a of args) { delete state.envVars[a]; delete state.arrays[a]; delete state.functions[a]; } updatePrompt(); return '';
     case 'shift': shellArgs = [shellArgs[0], ...shellArgs.slice(2)]; return '';
     case 'local': case 'declare': case 'typeset': {
@@ -2941,7 +2944,7 @@ function runCommand(cmd, args, stdin) {
     case 'cut': return cmdCut(args, stdin);
     case 'chmod': return cmdChmod(args);
     case 'printenv': if (args[0]) { if (state.envVars[args[0]] === undefined) forcedExit = 1; return escapeHtml(state.envVars[args[0]] || ''); } // falls through
-    case 'env': return Object.entries(state.envVars).map(([k,v])=>`${k}=${escapeHtml(v)}`).join('\n');
+    case 'env': return Object.entries(state.envVars).map(([k,v])=>`${escapeHtml(k)}=${escapeHtml(v)}`).join('\n');
     case 'export': return cmdExport(args);
     case 'alias': return cmdAlias(args);
     case 'unalias': {
@@ -2949,7 +2952,7 @@ function runCommand(cmd, args, stdin) {
       for (const a of args) { delete state.aliases[a]; }
       return '';
     }
-    case 'history': { checkAchievement('historian'); return state.history.map((h,i)=>`  ${i+1}  ${h}`).join('\n'); }
+    case 'history': { checkAchievement('historian'); return state.history.map((h,i)=>`  ${i+1}  ${escapeHtml(h)}`).join('\n'); }
     case 'ps': return 'PID   TTY     TIME  CMD\n  1   tty1    0:00  bash\n  42  tty1    0:00  terminal-academy\n 1234 tty1    0:03  node\n  99  tty1    0:00  ps';
     case 'jobs': return cmdJobs();
     case 'fg': case 'bg': return cmdFgBg(cmd, args);
@@ -3211,7 +3214,8 @@ function parseFlags(args, withValue) {
 }
 
 // --- ls ---
-function lsClass(name, child) {
+function lsClass(rawName, child) {
+  const name = escapeHtml(rawName);
   if (!child) return `<span class="dir-color">${name}</span>`;
   if (child.type === 'dir') return `<span class="dir-color">${name}</span>`;
   if (child.type === 'symlink') return `<span class="info">${name}</span>`;
@@ -3243,7 +3247,7 @@ function lsDirectory(node, flags) {
 }
 
 function lsRecursive(label, node, flags, out) {
-  out.push(`${label}:`);
+  out.push(`${escapeHtml(label)}:`);
   out.push(lsDirectory(node, flags));
   for (const name of Object.keys(node.children).sort()) {
     if (name.startsWith('.') && !flags.a && !flags.A) continue;
@@ -3731,7 +3735,7 @@ function cmdLs(args) {
     const node = getNode(state.fs, path);
     if (!raw && !node) { errors.push(`<span class="error">ls: cannot access '${escapeHtml(t)}': No such file or directory</span>`); continue; }
     if (flags.d || !node || node.type !== 'dir' || (raw && raw.type === 'symlink' && flags.l)) {
-      fileLines.push(flags.l ? formatLong(escapeHtml(t), raw || node) : lsClass(escapeHtml(t), raw || node));
+      fileLines.push(flags.l ? formatLong(t, raw || node) : lsClass(t, raw || node));
       continue;
     }
     if (flags.R) { const out = []; lsRecursive(t, node, flags, out); dirBlocks.push(out.join('\n')); continue; }
@@ -3743,7 +3747,8 @@ function cmdLs(args) {
   return parts.join('\n');
 }
 
-function formatLong(name, node) {
+function formatLong(rawName, node) {
+  const name = escapeHtml(rawName);
   const typeChar = node.type === 'dir' ? 'd' : (node.type === 'symlink' ? 'l' : '-');
   const perms = node.permissions || 'rw-r--r--';
   const size = nodeSize(node);
@@ -3759,7 +3764,7 @@ function formatLong(name, node) {
   } else {
     display = `<span class="file-color">${name}</span>`;
   }
-  return `<span class="perm-color">${typeChar}${perms}</span>  1 ${node.owner || 'player'} ${node.group || 'player'}  ${String(size).padStart(5)}  ${date}  ${display}`;
+  return `<span class="perm-color">${typeChar}${perms}</span>  1 ${escapeHtml(node.owner || 'player')} ${escapeHtml(node.group || 'player')}  ${String(size).padStart(5)}  ${date}  ${display}`;
 }
 
 // --- cd ---
@@ -4258,7 +4263,7 @@ function cmdChmod(args) {
 
 // --- export ---
 function cmdExport(args) {
-  if (!args.length) return Object.entries(state.envVars).map(([k, v]) => `declare -x ${k}="${escapeHtml(v)}"`).join('\n');
+  if (!args.length) return Object.entries(state.envVars).map(([k, v]) => `declare -x ${escapeHtml(k)}="${escapeHtml(v)}"`).join('\n');
   for (const a of args) {
     const eq = a.indexOf('=');
     if (eq > 0) {
@@ -4281,7 +4286,7 @@ function cmdAlias(args) {
     if (eq > 0) {
       state.aliases[a.slice(0, eq)] = a.slice(eq + 1);
       checkAchievement('aliaser');
-    } else if (state.aliases[a] !== undefined) shown.push(`alias ${escapeHtml(a)}='${escapeHtml(state.aliases[a])}'`);
+    } else if (own(state.aliases, a)) shown.push(`alias ${escapeHtml(a)}='${escapeHtml(state.aliases[a])}'`);
     else return `<span class="error">bash: alias: ${escapeHtml(a)}: not found</span>`;
   }
   return shown.join('\n');
@@ -4304,8 +4309,8 @@ function cmdShortcut(args) {
     'ctrl-k': { name:'Ctrl+K — Clear to End of Line', desc:'Deletes everything from the cursor to the end of the line. The complement of Ctrl+U.\n\n<span class="dim">Useful when you want to keep the beginning of a command but change the arguments.</span>\n<span class="highlight">Saved in the kill ring — retrieve with Ctrl+Y.</span>' },
     'tab': { name:'Tab — Auto-Complete', desc:'The shell automatically completes file names, directory names, and command names. Press Tab once for a unique match, twice to see all possibilities.\n\n<span class="dim">Examples:\n  "cd doc" + Tab → "cd documents/"\n  "git com" + Tab → "git commit"\n  "ls /usr/lo" + Tab → "ls /usr/local/"</span>\n<span class="highlight">Tab completion prevents typos and saves massive amounts of typing. Use it constantly!</span>' },
   };
-  const sc = shortcuts[key];
-  if (!sc) return `<span class="error">Unknown shortcut: ${key}</span>\n<span class="dim">Available: ${Object.keys(shortcuts).join(', ')}</span>`;
+  const sc = own(shortcuts, key) ? shortcuts[key] : null;
+  if (!sc) return `<span class="error">Unknown shortcut: ${escapeHtml(key)}</span>\n<span class="dim">Available: ${Object.keys(shortcuts).join(', ')}</span>`;
   state.shortcutsLearned.add(key);
   if (state.shortcutsLearned.size >= 5) checkAchievement('shortcut_pro');
   return `\n<span class="info">━━━ ${sc.name} ━━━</span>\n\n${sc.desc}\n`;
@@ -4597,8 +4602,8 @@ in your terminal.</span>`
 <span class="dim">A hook gets the details of the event as JSON on stdin, which is why jq is reading it above.</span>`
     },
   };
-  const feat = features[sub];
-  if (!feat) return `<span class="error">Unknown subcommand: ${sub}</span>\n<span class="dim">Available: help, slash, mcp, keybindings, skills, hooks</span>`;
+  const feat = own(features, sub) ? features[sub] : null;
+  if (!feat) return `<span class="error">Unknown subcommand: ${escapeHtml(sub)}</span>\n<span class="dim">Available: help, slash, mcp, keybindings, skills, hooks</span>`;
   state.claudeFeaturesExplored.add(sub);
   if (state.claudeFeaturesExplored.size >= 5) checkAchievement('claude_master');
   return `\n<span class="info">━━━ ${feat.title} ━━━</span>\n\n${feat.content}\n`;
@@ -4742,8 +4747,8 @@ Warp also supports compact mode for smaller screens.</span>`
 Search commands, files, workflows, settings — all in one place.</span>`
     },
   };
-  const feat = features[sub];
-  if (!feat) return `<span class="error">Unknown subcommand: ${sub}</span>\n<span class="dim">Available: blocks, workflows, ai, drive, themes, tips</span>`;
+  const feat = own(features, sub) ? features[sub] : null;
+  if (!feat) return `<span class="error">Unknown subcommand: ${escapeHtml(sub)}</span>\n<span class="dim">Available: blocks, workflows, ai, drive, themes, tips</span>`;
   state.warpFeaturesExplored.add(sub);
   if (state.warpFeaturesExplored.size >= 5) checkAchievement('warp_pilot');
   return `\n<span class="info">━━━ ${feat.title} ━━━</span>\n\n${feat.content}\n`;
@@ -4818,9 +4823,9 @@ function cmdReadlink(args) {
     if (!node || node.type !== 'dir' || !node.children[p]) { node = null; break; }
     node = node.children[p];
   }
-  if (!node) return `<span class="error">readlink: ${args[0]}: No such file or directory</span>`;
-  if (node.type === 'symlink') return node.target;
-  return `<span class="error">readlink: ${args[0]}: not a symbolic link</span>`;
+  if (!node) return `<span class="error">readlink: ${escapeHtml(args[0])}: No such file or directory</span>`;
+  if (node.type === 'symlink') return escapeHtml(node.target);
+  return `<span class="error">readlink: ${escapeHtml(args[0])}: not a symbolic link</span>`;
 }
 
 // --- tar ---
@@ -5648,7 +5653,7 @@ function cmdNano(args) {
   }
   const filePath = resolvePath(state.cwd, args[0]);
   const node = getNode(state.fs, filePath);
-  return `<span class="info">  GNU nano — ${args[0]}</span>
+  return `<span class="info">  GNU nano — ${escapeHtml(args[0])}</span>
 ${node && node.content ? '<span class="dim">' + escapeHtml(node.content.slice(0, 300)) + '</span>' : '<span class="dim">(New File)</span>'}
 
 <span class="dim">^O Write Out  ^X Exit  ^W Where Is  ^K Cut  ^U Paste  ^G Help
@@ -6348,7 +6353,7 @@ function cmdSysctl(args) {
   args = args.map(escapeHtml);
   if (!args[0]) return '<span class="dim">Usage: sysctl name\n  sysctl hw.ncpu       — number of CPUs\n  sysctl hw.memsize    — total memory\n  sysctl kern.ostype   — OS type</span>';
   const vals = {'hw.ncpu':'10','hw.memsize':'17179869184','kern.ostype':'Darwin','kern.hostname':'academy','kern.osrelease':'24.1.0'};
-  return vals[args[0]] ? `${args[0]}: ${vals[args[0]]}` : `<span class="error">sysctl: unknown oid '${args[0]}'</span>`;
+  return own(vals, args[0]) ? `${args[0]}: ${vals[args[0]]}` : `<span class="error">sysctl: unknown oid '${args[0]}'</span>`;
 }
 
 // --- stat ---
@@ -6371,7 +6376,7 @@ function cmdStat(args) {
   Size: ${size}        Blocks: ${Math.ceil(size / 4096) * 8}   ${kind}
 Device: 1,4   Inode: ${inode}   Links: 1
 Access: (${octal}/${typeChar}${perms})
-  Uid: (  501/  ${node.owner || 'player'})   Gid: (   20/   ${node.group || 'staff'})
+  Uid: (  501/  ${escapeHtml(node.owner || 'player')})   Gid: (   20/   ${escapeHtml(node.group || 'staff')})
 Access: 2026-03-23 10:00:00.000000000
 Modify: 2026-03-23 10:00:00.000000000
 Change: 2026-03-23 10:00:00.000000000
@@ -6536,7 +6541,7 @@ function cmdTldr(args) {
     git: ['Distributed version control system.', [['Check status', 'git status'], ['Stage everything', 'git add .'], ['Commit', 'git commit -m "message"'], ['See history', 'git log --oneline']]],
     ssh: ['Secure Shell: log into remote machines.', [['Connect to a server', 'ssh user@host'], ['Use a specific key', 'ssh -i key.pem user@host'], ['Use a specific port', 'ssh -p 2222 user@host']]],
   };
-  const page = pages[args[0]];
+  const page = own(pages, args[0]) ? pages[args[0]] : null;
   if (!page) return `<span class="dim">This simulator only has tldr pages for: ${Object.keys(pages).join(', ')}. The real tldr covers thousands of commands.</span>`;
   return `<span class="info">  ${escapeHtml(args[0])}</span>\n\n  ${escapeHtml(page[0])}\n\n${page[1].map(([d, c]) => `  - ${escapeHtml(d)}:\n    <span class="success">${escapeHtml(c)}</span>`).join('\n\n')}\n\n<span class="dim">tldr provides practical examples instead of full man pages.\nInstall: brew install tlrc (the official Rust client; it runs as the tldr command)</span>`;
 }
@@ -6855,8 +6860,8 @@ function cmdType(args) {
   const shown = [];
   for (const a of args) {
     const safe = escapeHtml(a);
-    if (state.aliases[a]) { shown.push(`${safe} is aliased to '${escapeHtml(state.aliases[a])}'`); continue; }
-    if (state.functions[a]) { shown.push(`${safe} is a function`); continue; }
+    if (own(state.aliases, a)) { shown.push(`${safe} is aliased to '${escapeHtml(state.aliases[a])}'`); continue; }
+    if (own(state.functions, a)) { shown.push(`${safe} is a function`); continue; }
     if (['for','while','until','if','case','select','then','else','elif','fi','do','done','esac','[['].includes(a)) { shown.push(`${safe} is a shell keyword`); continue; }
     const builtins = ['cd','echo','export','alias','unalias','source','type','read','printf','set','unset','eval','exec','builtin','command','declare','local','return','shift','test','trap','wait','pwd','history','jobs','fg','bg','kill','break','continue','exit','true','false','['];
     if (builtins.includes(a)) { shown.push(`${safe} is a shell builtin`); continue; }
@@ -7574,7 +7579,7 @@ function cmdOd(args, stdin) {
 // --- man ---
 function cmdMan(args) {
   if (!args[0]) return 'What manual page do you want?\nUsage: man &lt;command&gt;';
-  const page = manPages[args[0]];
+  const page = own(manPages, args[0]) ? manPages[args[0]] : null;
   state.manPagesRead.add(args[0]);
   if (state.manPagesRead.size >= 5) checkAchievement('scholar');
   if (!page) {
@@ -7685,10 +7690,26 @@ function updatePrompt() {
   document.getElementById('prompt').textContent = pendingLines.length ? '> ' : promptText();
 }
 
+// Commands build their output as HTML, and it can hold text the learner typed or pasted. Whatever a command
+// forgot to escape, only plain <span> formatting gets through here; anything else shows as text and never runs.
+function safeOutput(html) {
+  const tpl = document.createElement('template'); // template contents are inert: nothing loads or fires while parsing
+  tpl.innerHTML = html;
+  const clean = parent => {
+    for (const el of [...parent.children]) {
+      if (el.tagName !== 'SPAN') { el.replaceWith(document.createTextNode(el.outerHTML)); continue; }
+      for (const attr of [...el.attributes]) if (attr.name !== 'class' && attr.name !== 'style') el.removeAttribute(attr.name);
+      clean(el);
+    }
+  };
+  clean(tpl.content);
+  return tpl.content;
+}
+
 function printToTerminal(html, className) {
   const div = document.createElement('div');
   div.className = 'line ' + (className || '');
-  div.innerHTML = html;
+  div.appendChild(safeOutput(html));
   terminalEl.appendChild(div);
   // Cap terminal output at 1000 lines to prevent memory bloat
   while (terminalEl.children.length > 1000) terminalEl.removeChild(terminalEl.firstChild);
@@ -7807,7 +7828,7 @@ function cancelPending() {
 }
 
 function escapeHtml(str) {
-  return String(str === null || str === undefined ? '' : str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(str === null || str === undefined ? '' : str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 inputEl.addEventListener('keydown', e => {
@@ -7960,7 +7981,7 @@ function updateSyntaxHighlight() {
     if (isFirstCmd) {
       // Check if it's a valid command or alias
       const cmdBase = word.split('/').pop(); // handle ./script
-      const isValid = validCommands.has(cmdBase) || state.aliases[cmdBase];
+      const isValid = validCommands.has(cmdBase) || own(state.aliases, cmdBase);
       html += `<span class="${isValid ? 'cmd-valid' : 'cmd-invalid'}">${escapeHtml(word)}</span>`;
       isFirstCmd = false;
     } else if (word.startsWith('-')) {
