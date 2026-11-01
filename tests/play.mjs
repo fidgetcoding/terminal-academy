@@ -3,7 +3,7 @@
 // shows the learner; challenge answers and quiz keys come from course data read out of index.html.
 //
 //   node tests/play.mjs [--viewport desktop|mobile] [--browser chromium|firefox|webkit] [--out run-name] [--base URL]
-import { arg, BASE, BROWSER, launch, mobile, outFile } from './lib.mjs';
+import { arg, BASE, BROWSER, COLLECTOR, LIVE_URL, asLive, badCount, countName, countNumber, launch, mobile, outFile } from './lib.mjs';
 import fs from 'fs';
 
 const VIEW = arg('viewport', 'desktop');
@@ -24,6 +24,7 @@ const ctxOpts = VIEW === 'mobile'
   ? { viewport: { width: 390, height: 844 }, hasTouch: true, ...mobile() }
   : { viewport: { width: 1440, height: 900 } };
 const ctx = await browser.newContext(ctxOpts);
+const counts = await asLive(ctx); // plays on the real address with a stand-in collector, so the usage counts get checked too
 const page = await ctx.newPage();
 
 const consoleErrors = [];
@@ -31,7 +32,7 @@ page.on('pageerror', e => consoleErrors.push('pageerror: ' + e.message));
 page.on('console', m => { if (m.type() === 'error') consoleErrors.push('console: ' + m.text()); });
 page.on('requestfailed', r => consoleErrors.push('requestfailed: ' + r.url() + ' ' + (r.failure()?.errorText || '')));
 page.on('response', r => { if (r.status() >= 400) consoleErrors.push(`http ${r.status()}: ${r.url()}`); });
-page.on('request', r => { if (!r.url().startsWith(new URL(BASE).origin) && !r.url().startsWith('data:')) consoleErrors.push(`outbound request: ${r.url()}`); });
+page.on('request', r => { if (!r.url().startsWith(LIVE_URL) && !r.url().startsWith(COLLECTOR + '/') && !r.url().startsWith('data:')) consoleErrors.push(`outbound request: ${r.url()}`); });
 
 const tap = async sel => {
   if (VIEW === 'mobile') await page.locator(sel).first().tap();
@@ -127,7 +128,7 @@ function chooseCommand(task) {
 }
 
 // ---- 1. entry flow ----
-await page.goto(BASE);
+await page.goto(LIVE_URL);
 await page.waitForTimeout(800);
 await checkLayout('welcome screen');
 if (await page.locator('input[type=password], input[type=email]').count()) record('entry', 'login', '', false, ['a login form is on the page']);
@@ -579,9 +580,10 @@ await checkLayout('final');
   });
   const whole = await read(page);
   const ctx2 = await browser.newContext(ctxOpts);
+  const otherCounts = await asLive(ctx2);
   const other = await ctx2.newPage();
   other.on('pageerror', e => consoleErrors.push('pageerror after moving the save: ' + e.message));
-  await other.goto(BASE);
+  await other.goto(LIVE_URL);
   await other.getByRole('button', { name: /BEGIN TRAINING/ }).click();
   await other.locator('.panel-tabs button[data-tab="save"]').click();
   await other.locator('#save-code-in').fill(code);
@@ -602,12 +604,33 @@ await checkLayout('final');
   await other.keyboard.press('Enter');
   const report = await other.evaluate(() => document.getElementById('terminal').lastElementChild.parentElement.innerText);
   if (!/findings/.test(report)) moved.push('files did not arrive');
+  if (otherCounts.some(c => countName(c) !== 'visit')) moved.push('moving a save added counts: ' + otherCounts.map(countName).join());
   record('move', 'code', '', moved.length === 0, moved);
   log(`Moved the finished game with a ${code.length} character code`);
   await ctx2.close();
   await tap('.panel-tabs button[data-tab="lessons"]');
 }
 await page.screenshot({ path: outFile(`${OUT}-final.png`).pathname });
+
+// ---- 9. The whole course produced exactly the promised counts ----
+{
+  await page.waitForTimeout(200);
+  const u = [];
+  const numbers = name => counts.filter(c => countName(c) === name).map(countNumber).sort((a, b) => a - b).join();
+  const oneTo = n => Array.from({ length: n }, (_, i) => i + 1).join();
+  for (const c of counts) { const bad = badCount(c); if (bad) u.push(bad); }
+  if (numbers('chapter_started') !== oneTo(81)) u.push(`chapters started: ${numbers('chapter_started')}`);
+  if (numbers('chapter_finished') !== oneTo(81)) u.push(`chapters finished: ${numbers('chapter_finished')}`);
+  if (numbers('quest_finished') !== oneTo(10)) u.push(`quests finished: ${numbers('quest_finished')}`);
+  if (counts.filter(c => countName(c) === 'game_finished').length !== 1) u.push('game finished was not counted exactly once');
+  if (!counts.some(c => countName(c) === 'visit')) u.push('no visit counted');
+  const sentText = JSON.stringify(counts);
+  const typedCommands = results.map(r => r.cmd).filter(c => c && c.length > 3);
+  for (const c of new Set(typedCommands)) if (sentText.includes(JSON.stringify(c).slice(1, -1))) u.push(`a typed command reached the collector: ${c}`);
+  if (typedCommands.length < 390) u.push(`only ${typedCommands.length} commands to compare`);
+  record('usage', 'counts', '', u.length === 0, u);
+  log(`Usage counts sent: ${counts.length}`);
+}
 
 for (const e of [...new Set(consoleErrors)]) record('console', 'error', '', false, [e]);
 

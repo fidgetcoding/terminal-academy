@@ -513,12 +513,12 @@ async function playSome(page) {
   await c2.close();
 }
 
-// ---- The promise that nothing leaves the page, enforced by the browser ----
+// ---- The only connection the page can make is the usage counter, enforced by the browser ----
 {
   const { ctx, page } = await open();
   await page.screenshot({ path: outFile(`save-desktop-${BROWSER}.png`).pathname });
   const csp = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content');
-  check('the page carries a security policy', /default-src 'none'/.test(csp) && !/unsafe-eval/.test(csp) && !/connect-src/.test(csp), csp);
+  check('the page carries a security policy', /default-src 'none'/.test(csp) && !/unsafe-eval/.test(csp) && /connect-src https:\/\/us\.i\.posthog\.com;/.test(csp), csp);
   const source = await page.evaluate(() => document.querySelector('script').textContent);
   check('the page has no eval or new Function', !/\beval\(|\bFunction\(/.test(source));
   // A server the page could reach if the policy let it. What counts is what arrives here, since a browser may report a blocked request as started.

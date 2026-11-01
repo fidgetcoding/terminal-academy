@@ -1,6 +1,7 @@
-// Confirms a visitor can never hit a login or sync failure: no login UI, no outbound requests, works with the
-// whole network cut off, and saves from before the login was removed still load.
-import { BASE, ORIGIN, launch } from './lib.mjs';
+// Confirms a visitor can never hit a login or sync failure: no login UI, works with the whole network cut off, and
+// saves from before the login was removed still load. Also holds the usage counts to exactly what the page promises:
+// one host, fixed shapes, nothing typed, and an opt-out that works. No real counts are sent.
+import { BASE, COLLECTOR, LIVE_URL, ORIGIN, asLive, badCount, countName, countNumber, launch } from './lib.mjs';
 const browser = await launch();
 const results = [];
 const check = (name, ok, detail = '') => { results.push({ name, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${ok ? '' : '   -> ' + detail}`); };
@@ -29,7 +30,7 @@ const send = async (page, c) => { await page.locator('#cmd-input').focus(); awai
   for (const c of ['whoami', 'hostname', 'pwd', 'echo hi']) await send(page, c);
   await page.waitForTimeout(1200);
   await page.waitForTimeout(6000); // longer than the old 5-second sync delay
-  check('no outbound request while playing', outbound.length === 0, outbound.join(', '));
+  check('a copy on any other address sends nothing', outbound.length === 0, outbound.join(', '));
   check('no console errors or failed requests', errs.length === 0, errs.join(' | '));
   // 2. Returning visitor goes straight in, even after several reloads
   await page.reload();
@@ -99,6 +100,180 @@ const send = async (page, c) => { await page.locator('#cmd-input').focus(); awai
   await send(page, 'whoami');
   check('plays with browser storage blocked', await page.locator('#panel-lessons .task-item').first().evaluate(n => n.classList.contains('done')));
   check('no page errors with storage blocked', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+// 6. On the real address: exactly the agreed counts, to one host, and nothing typed
+const SECRET = 'ZZSECRET7731';
+const list = sent => sent.map(c => `${countName(c)}${countNumber(c) ? ' ' + countNumber(c) : ''}`);
+// The last command holds the marker, so it's the very command that triggers a count.
+const playChapterOne = async page => {
+  await page.getByRole('button', { name: /BEGIN TRAINING/ }).click();
+  for (const c of ['whoami', 'hostname', 'pwd', `echo "Hello Terminal ${SECRET}"`]) await send(page, c);
+};
+const settled = async (page, sent, count) => {
+  for (let i = 0; i < 40 && sent.length < count; i++) await page.waitForTimeout(50);
+};
+{
+  const ctx = await browser.newContext();
+  const sent = await asLive(ctx);
+  const page = await ctx.newPage();
+  const otherHosts = [], everything = [], errs = [];
+  page.on('pageerror', e => errs.push(e.message));
+  page.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
+  page.on('request', async r => {
+    const url = r.url();
+    if (!url.startsWith(LIVE_URL) && !url.startsWith(COLLECTOR + '/') && !url.startsWith('data:')) otherHosts.push(url);
+    everything.push(url, r.postData() || '', JSON.stringify(await r.allHeaders().catch(() => ({}))));
+  });
+  await page.goto(LIVE_URL);
+  await settled(page, sent, 1);
+  check('opening the page counts one visit', list(sent).join() === 'visit', list(sent).join());
+  await playChapterOne(page);
+  await settled(page, sent, 3);
+  check('chapter 1 counts started and finished', list(sent).join() === 'visit,chapter_started 1,chapter_finished 1', list(sent).join());
+  await page.locator('#panel-lessons .chapter-label', { hasText: /Chapter 2 of/i }).first().waitFor();
+  const before = sent.length;
+  for (const c of [`echo ${SECRET}`, `touch ${SECRET}.txt`, `export K=${SECRET}`, SECRET, 'git init', 'git add .', `git commit -m ${SECRET}`, `echo ${SECRET} | pbcopy`, `alias ${SECRET}=ls`, `cat ${SECRET}.txt`, `mkdir ${SECRET}`, `cd ${SECRET}`, 'cd ~', `grep ${SECRET} *`]) await send(page, c);
+  await page.locator('.panel-tabs button[data-tab="save"]').click();
+  await page.locator('#save-code-in').fill(SECRET);
+  await page.getByRole('button', { name: 'Check this code' }).click();
+  await page.locator('#save-status', { hasText: /save/i }).waitFor();
+  await page.waitForTimeout(300);
+  check('typing commands adds no counts of its own', sent.slice(before).every(c => /chapter_/.test(countName(c))), list(sent.slice(before)).join());
+  check('a typed command never appears in any request', !everything.join('\n').includes(SECRET));
+  check('a typed command never appears in a count', !JSON.stringify(sent).includes(SECRET));
+  check('every count is exactly the agreed shape', sent.every(c => !badCount(c)), sent.map(badCount).filter(Boolean).join(' | '));
+  check('nothing goes to any other host', otherHosts.length === 0, otherHosts.join(', '));
+  check('no cookies are set', (await ctx.cookies()).length === 0);
+  const stored = await page.evaluate(() => Object.keys(localStorage).sort().join());
+  check('browser storage holds only the save', stored === 'terminalAcademy', stored);
+  check('no errors while counting', errs.length === 0, errs.join(' | '));
+  const blocked = await page.evaluate(async () => {
+    try { await fetch('https://example.com/?leak=1'); return 'sent'; } catch (e) { return 'blocked'; }
+  });
+  check('the browser blocks every other host', blocked === 'blocked', blocked);
+
+  // A finished save with a secret in it counts nothing on arrival, and sends nothing from inside it
+  const code = await page.evaluate(([secret, chapters]) => {
+    const w = JSON.parse(currentSaveJson());
+    w.save.completedLessons = Array.from({ length: chapters }, (_, i) => i);
+    w.save.history = [secret];
+    w.save.fs['/'].children.home.children.player.children[secret] = { type: 'file', permissions: 'rw-r--r--', content: secret };
+    return JSON.stringify(w);
+  }, [SECRET, 81]);
+  const fromSave = sent.length;
+  await page.locator('#save-code-in').fill(code);
+  await page.getByRole('button', { name: 'Check this code' }).click();
+  await page.locator('#save-confirm').waitFor();
+  const loaded = page.waitForEvent('load');
+  await page.getByRole('button', { name: 'Load this save' }).click();
+  await loaded;
+  await settled(page, sent, fromSave + 1);
+  await page.waitForTimeout(200);
+  check('loading a finished save counts only the page opening', list(sent.slice(fromSave)).join() === 'visit', list(sent.slice(fromSave)).join());
+  check('nothing from a save appears in a request', !JSON.stringify(sent).includes(SECRET) && !everything.join('\n').includes(SECRET));
+  await ctx.close();
+}
+
+// 7. Copies on other addresses never count, and only one line in the page talks to the collector
+{
+  const ctx = await browser.newContext();
+  const sent = await asLive(ctx);
+  const page = await ctx.newPage();
+  await page.goto(BASE);
+  await page.waitForTimeout(200);
+  check('the game counts nothing from another address', sent.length === 0, list(sent).join());
+  const source = await page.evaluate(() => document.querySelector('script').textContent);
+  check('the page calls the collector in exactly one place', source.match(/\bfetch\(/g).length === 1 && !/sendBeacon|XMLHttpRequest|WebSocket|posthog-js/.test(source));
+  await ctx.close();
+}
+
+// 8. The opt-out
+{
+  const ctx = await browser.newContext();
+  const sent = await asLive(ctx);
+  const page = await ctx.newPage();
+  await page.goto(LIVE_URL);
+  await settled(page, sent, 1);
+  check('the welcome screen says what is counted', /never what you type/.test(await page.locator('#welcome-box').innerText()));
+  await page.getByRole('button', { name: "Don't count me" }).click();
+  check('the welcome screen confirms the opt-out', /Nothing is counted/.test(await page.locator('#welcome-box').innerText()));
+  await playChapterOne(page);
+  await page.waitForTimeout(300);
+  check('opting out on the welcome screen stops the counts', list(sent).join() === 'visit', list(sent).join());
+  await page.reload();
+  await send(page, 'ls');
+  await page.waitForTimeout(300);
+  check('the opt-out survives a reload', list(sent).join() === 'visit', list(sent).join());
+  await page.locator('.panel-tabs button[data-tab="save"]').click();
+  const panel = await page.locator('#panel-save').innerText();
+  check('the Save tab lists what is counted', /each time this page opens/.test(panel) && /each chapter started and finished/.test(panel) && /each adventure quest finished/.test(panel) && /finishing every chapter/.test(panel));
+  check('the Save tab says what never is', /never sends what you type, your files, your save, or your name/.test(panel));
+  check('the Save tab names who holds the counts and the IP address', /PostHog/.test(panel) && /IP address/.test(panel));
+  check('the Save tab shows counting is off', !(await page.locator('#usage-toggle').isChecked()) && /Counting is off/.test(panel));
+  await page.locator('#usage-toggle').check();
+  check('counting can be turned back on', await page.evaluate(() => localStorage.getItem('terminalAcademyCounts')) === null);
+  await send(page, 'pwd');
+  await page.reload();
+  await settled(page, sent, 2);
+  check('turned back on, it counts again', list(sent).join() === 'visit,visit', list(sent).join());
+  await page.locator('.panel-tabs button[data-tab="save"]').click();
+  await page.locator('#usage-toggle').uncheck();
+  check('the Save tab can opt out too', await page.evaluate(() => localStorage.getItem('terminalAcademyCounts')) === 'off');
+  await ctx.close();
+}
+
+// 9. Browsers that ask not to be tracked are never counted, not even the first visit
+for (const [name, prop, value] of [['Global Privacy Control', 'globalPrivacyControl', true], ['Do Not Track', 'doNotTrack', '1']]) {
+  const ctx = await browser.newContext();
+  await ctx.addInitScript(([p, v]) => Object.defineProperty(Navigator.prototype, p, { get: () => v, configurable: true }), [prop, value]);
+  const sent = await asLive(ctx);
+  const page = await ctx.newPage();
+  await page.goto(LIVE_URL);
+  await playChapterOne(page);
+  await page.waitForTimeout(300);
+  check(`${name} means no counts at all`, sent.length === 0, list(sent).join());
+  await page.locator('.panel-tabs button[data-tab="save"]').click();
+  check(`${name} is explained and can't be overridden`, /asks sites not to track/.test(await page.locator('#usage-note').innerText()) && await page.locator('#usage-toggle').isDisabled());
+  await ctx.close();
+}
+
+// 10. The collector blocked, failing, or hanging: the game doesn't notice
+for (const down of ['abort', '500', 'hang']) {
+  const ctx = await browser.newContext();
+  await asLive(ctx, { down });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(e.message));
+  await page.goto(LIVE_URL);
+  await playChapterOne(page);
+  await page.locator('#panel-lessons .chapter-label', { hasText: /Chapter 2 of/i }).first().waitFor();
+  await page.reload();
+  const label = await page.locator('#panel-lessons .chapter-label').first().innerText();
+  check(`collector ${down}: progress is kept`, /Chapter 2 of/i.test(label), label);
+  check(`collector ${down}: no page errors`, errs.length === 0, errs.join(' | '));
+  check(`collector ${down}: nothing shown to the player`, !/posthog|failed to fetch|could not be run/i.test(await page.locator('#terminal').innerText()));
+  await ctx.close();
+}
+
+// 11. Browser storage blocked on the real address: still plays, and the opt-out holds for the page
+{
+  const ctx = await browser.newContext();
+  await ctx.addInitScript(() => {
+    Object.defineProperty(window, 'localStorage', { get() { throw new Error('blocked'); } });
+  });
+  const sent = await asLive(ctx);
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(e.message));
+  await page.goto(LIVE_URL);
+  await settled(page, sent, 1);
+  await page.getByRole('button', { name: "Don't count me" }).click();
+  await playChapterOne(page);
+  await page.waitForTimeout(300);
+  check('with storage blocked the opt-out still holds for the page', list(sent).join() === 'visit', list(sent).join());
+  check('with storage blocked counting causes no errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }
 
