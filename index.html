@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src https://us.i.posthog.com; base-uri 'none'; form-action 'none'">
 <link rel="icon" href="data:,">
 <title>Terminal Academy</title>
 <style>
@@ -133,6 +133,9 @@ body { background:var(--bg); color:var(--text); font-family:var(--font); height:
 .save-note { color:var(--dim); font-size:11px; margin-top:8px; }
 #panel-save input[type=file] { display:block; max-width:100%; color:var(--text); font-size:12px; }
 #save-status { font-size:12px; line-height:1.6; margin-top:10px; }
+#panel-save ul { margin:8px 0 8px 18px; font-size:12px; line-height:1.7; }
+#panel-save label { display:block; margin-top:10px; font-size:12px; cursor:pointer; }
+#usage-note { color:var(--dim); font-size:11px; margin-top:6px; }
 #save-confirm { margin-top:10px; padding:10px; background:var(--panel2); border:1px solid var(--yellow); border-radius:6px; }
 .panel-content h2 { color:var(--cyan); font-size:14px; margin-bottom:8px; }
 .panel-content h3 { color:var(--green); font-size:13px; margin:12px 0 6px; }
@@ -351,6 +354,10 @@ body { background:var(--bg); color:var(--text); font-family:var(--font); height:
   cursor:pointer; transition:all .2s;
 }
 #welcome-box button:hover { background:var(--cyan); }
+#welcome-box button.counts-off, #welcome-box button.counts-off:hover {
+  display:inline; padding:0; margin:0; background:none; border:none; box-shadow:none; color:var(--cyan);
+  font-family:inherit; font-size:inherit; font-weight:normal; text-decoration:underline; cursor:pointer;
+}
 /* ===== MOBILE RESPONSIVE ===== */
 @media (max-width: 900px) {
   #main { flex-direction:column; }
@@ -457,6 +464,7 @@ body { background:var(--bg); color:var(--text); font-family:var(--font); height:
     <p>Welcome, cadet! You're about to learn how to wield the most powerful tool in computing — the terminal. Through hands-on missions, you'll go from zero to power user.</p>
     <p style="color:var(--yellow);font-size:12px;">81 Chapters · 300+ Missions · Endless Challenges · 60+ Quiz Questions · Achievements · Encyclopedia</p>
     <p style="color:var(--dim);font-size:12px;">No account needed. Your progress saves in this browser.</p>
+    <p id="welcome-counts" style="color:var(--dim);font-size:12px;">I count visits and finished chapters, never what you type. The Save tab has the full list. <button class="counts-off" onclick="setUsageOn(false)">Don't count me</button></p>
     <button onclick="startGame()">BEGIN TRAINING →</button>
   </div>
 </div>
@@ -514,7 +522,7 @@ body { background:var(--bg); color:var(--text); font-family:var(--font); height:
     <div class="panel-content" id="panel-glossary" style="display:none"></div>
     <div class="panel-content" id="panel-save" style="display:none">
       <h2>Move Your Progress</h2>
-      <p>Your progress lives in this browser. To keep playing on another device, take a save with you. Nothing is uploaded: a save only goes where you send it.</p>
+      <p>Your progress lives in this browser. To keep playing on another device, take a save with you. Your save is never uploaded: it only goes where you send it.</p>
       <h3>Take a save</h3>
       <button class="challenge-btn" onclick="downloadSave()">Download save file</button>
       <button class="challenge-btn" onclick="showSaveCode()">Show save code</button>
@@ -533,6 +541,18 @@ body { background:var(--bg); color:var(--text); font-family:var(--font); height:
         <button class="challenge-btn" onclick="applyImport()">Load this save</button>
         <button class="challenge-btn skip" onclick="cancelImport()">Cancel</button>
       </div>
+      <h3 style="margin-top:20px">What I count</h3>
+      <p>To see whether the course works, I count these things, with no cookies and no ID:</p>
+      <ul>
+        <li>each time this page opens</li>
+        <li>each chapter started and finished</li>
+        <li>each adventure quest finished</li>
+        <li>finishing every chapter</li>
+      </ul>
+      <p>The counts go to PostHog, a service that stores them for me. PostHog can see your IP address when a count arrives, as any website can, and the game asks it not to work out your location from it.</p>
+      <p>The game never sends what you type, your files, your save, or your name.</p>
+      <label><input type="checkbox" id="usage-toggle" onchange="setUsageOn(this.checked)"> Count my visits and progress</label>
+      <div id="usage-note"></div>
     </div>
   </div>
 </div>
@@ -8171,6 +8191,7 @@ function validateTask(rawCmd, failed) {
       completed.add(i);
       addXP(15);
       showToast(`✓ Mission complete!`, 'xp');
+      if (completed.size === 1) countUsage('chapter_started', { chapter: lesson.chapter });
 
       // Move to next incomplete task
       const nextIncomplete = lesson.tasks.findIndex((_, idx) => !completed.has(idx));
@@ -8180,6 +8201,7 @@ function validateTask(rawCmd, failed) {
       if (completed.size === lesson.tasks.length) {
         state.completedLessons.add(state.currentLesson);
         addXP(lesson.xp);
+        countUsage('chapter_finished', { chapter: lesson.chapter });
         showToast(`🎉 Chapter ${lesson.chapter} Complete! +${lesson.xp} XP`, 'ach');
 
         // Check time-based achievement
@@ -8194,6 +8216,7 @@ function validateTask(rawCmd, failed) {
 
         // Finished everything, or auto-advance after a moment
         if (state.completedLessons.size >= lessons.length) {
+          countUsage('game_finished');
           printToTerminal(`\n<span class="success">🎓 CONGRATULATIONS! You've completed all ${lessons.length} chapters of Terminal Academy!</span>`, 'success');
           printToTerminal(`<span class="info">You're now a terminal master. The real terminal awaits!</span>`, 'info');
         } else if (state.currentLesson < lessons.length - 1) {
@@ -8673,6 +8696,7 @@ function validateAdventure(rawCmd, failed) {
   if (progress.size === quest.objectives.length && !adventureState.completedQuests.has(quest.id)) {
     adventureState.completedQuests.add(quest.id);
     addXP(quest.xp);
+    countUsage('quest_finished', { quest: quest.num });
     showToast(`🏆 Quest ${quest.num} Complete: ${quest.title}! +${quest.xp} XP`, 'ach');
     printToTerminal(`\n<span class="success">━━━ QUEST COMPLETE: ${quest.title} ━━━</span>`, 'success');
     printToTerminal(`<span class="info">${quest.reward}</span>\n`, 'info');
@@ -9157,6 +9181,63 @@ function answerQuiz(choice) {
 }
 
 // ============================================================
+// USAGE COUNTS
+// ============================================================
+// Anonymous counts, listed in the Save tab. Each one is a fixed event name and at most a number from the course itself,
+// with one shared ID for everybody, so nothing a learner typed or saved can get into one. Empty the key to stop counting.
+const USAGE = { key: 'phc_nkB5qDsUnUyyHKkzGJbwNworNCBsar69d3DQbCiVZNbE', host: 'https://us.i.posthog.com', site: 'fidgetcoding.github.io' };
+const USAGE_KEY = 'terminalAcademyCounts';
+let usageChoice = null; // holds an opt-out for this page if browser storage is blocked
+
+function browserAsksNotToTrack() {
+  return navigator.globalPrivacyControl === true || navigator.doNotTrack === '1';
+}
+
+function usageIsOn() {
+  if (browserAsksNotToTrack() || usageChoice === false) return false;
+  try { return localStorage.getItem(USAGE_KEY) !== 'off'; } catch (e) { return true; }
+}
+
+function setUsageOn(on) {
+  usageChoice = on;
+  try {
+    if (on) localStorage.removeItem(USAGE_KEY);
+    else localStorage.setItem(USAGE_KEY, 'off');
+  } catch (e) { /* the choice still holds until this page closes */ }
+  showUsageChoice();
+}
+
+function showUsageChoice() {
+  const on = usageIsOn();
+  const toggle = document.getElementById('usage-toggle');
+  toggle.checked = on;
+  toggle.disabled = browserAsksNotToTrack();
+  document.getElementById('usage-note').textContent = browserAsksNotToTrack()
+    ? 'Your browser asks sites not to track you, so nothing is counted.'
+    : on ? 'Turning this off stops all counts from this browser.' : 'Counting is off in this browser.';
+  if (!on) document.getElementById('welcome-counts').textContent = 'Nothing is counted in this browser.';
+}
+
+function countUsage(event, numbers) {
+  if (!USAGE.key || location.hostname !== USAGE.site || !usageIsOn()) return;
+  try {
+    fetch(USAGE.host + '/i/v0/e/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'omit',
+      referrerPolicy: 'no-referrer',
+      keepalive: true,
+      body: JSON.stringify({
+        api_key: USAGE.key,
+        event: 'terminal_academy_' + event,
+        distinct_id: 'anonymous',
+        properties: { $process_person_profile: false, $geoip_disable: true, ...numbers },
+      }),
+    }).catch(() => {});
+  } catch (e) { /* the game never depends on this */ }
+}
+
+// ============================================================
 // SAVE CHECKING
 // ============================================================
 // A save can come from anywhere: another device, a stranger's file, or another site on this origin, since
@@ -9426,7 +9507,7 @@ function checkSave(raw, fromElsewhere) {
 // MOVING A SAVE BETWEEN DEVICES
 // ============================================================
 // All of this happens in this page. A file goes to the Downloads folder and a code goes to the clipboard, and
-// nothing is uploaded anywhere: the page's security policy doesn't even allow it to make a connection.
+// a save is never uploaded. The page's security policy allows one connection only, to the usage counter below.
 const SAVE_APP = 'terminal-academy';
 const SAVE_VERSION = 1;
 let pendingImport = null;
@@ -9751,6 +9832,8 @@ document.getElementById('terminal-pane').addEventListener('click', () => inputEl
 let hasSave = false;
 try { hasSave = !!localStorage.getItem('terminalAcademy'); } catch(e) {}
 if (hasSave) startGame();
+showUsageChoice();
+countUsage('visit');
 </script>
 </body>
 </html>
