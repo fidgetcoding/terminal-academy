@@ -7,7 +7,7 @@ permissions:
   contents: read
 jobs:
   browsers:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # Playwright 1.58 has no browsers for newer Ubuntu
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -25,7 +25,7 @@ jobs:
       - run: npx playwright install --with-deps ${{ matrix.browser }}
       - run: node run-all.mjs --browser ${{ matrix.browser }}
   cross-browser:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # Playwright 1.58 has no browsers for newer Ubuntu
     timeout-minutes: 30
     defaults:
       run:
