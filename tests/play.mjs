@@ -30,7 +30,12 @@ const page = await ctx.newPage();
 const consoleErrors = [];
 page.on('pageerror', e => consoleErrors.push('pageerror: ' + e.message));
 page.on('console', m => { if (m.type() === 'error') consoleErrors.push('console: ' + m.text()); });
-page.on('requestfailed', r => consoleErrors.push('requestfailed: ' + r.url() + ' ' + (r.failure()?.errorText || '')));
+page.on('requestfailed', r => {
+  const why = r.failure()?.errorText || '';
+  // A reload can cut off a count still in flight. no-backend.mjs proves the game shrugs that off.
+  if (r.url().startsWith(COLLECTOR) && why === 'net::ERR_ABORTED') return;
+  consoleErrors.push('requestfailed: ' + r.url() + ' ' + why);
+});
 page.on('response', r => { if (r.status() >= 400) consoleErrors.push(`http ${r.status()}: ${r.url()}`); });
 page.on('request', r => { if (!r.url().startsWith(LIVE_URL) && !r.url().startsWith(COLLECTOR + '/') && !r.url().startsWith('data:')) consoleErrors.push(`outbound request: ${r.url()}`); });
 
