@@ -78,6 +78,22 @@ cd tests && npm ci && npx playwright install chromium firefox webkit
 node run-all.mjs --browser firefox
 ```
 
+From the repository root, run a focused check of filesystem safety, save races, progression timers and keyboard behavior:
+
+```bash
+node tests/run-all.mjs --suite maintenance
+```
+
+The full runner includes these checks. It starts an isolated localhost server and prints its address; test traffic never sends real usage counts.
+
+To rerun the stored-save and round-trip phase after a save-suite failure:
+
+```bash
+node tests/run-all.mjs --browser webkit --suite save --stored-only
+```
+
+This runs the remaining phase explicitly; use the full save suite for import coverage. Save tests retain completed assertions and the active case in `tests/out/` if a browser operation throws. WebKit uses fresh browsers between batches of 32 stored saves; the isolated navigation probe stopped at context 64 on both baseline and fixed code.
+
 ## License
 
 [MIT](LICENSE). Built by Nate Davidovich / Lorecraft LLC.

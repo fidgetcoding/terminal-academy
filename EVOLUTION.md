@@ -108,3 +108,19 @@ The 606 includes a lot of knock-on damage, since one lost save wrecks everything
 - Test output: the scripts in `tests/`, run by `.github/workflows/tests.yml`.
 - 2026-11-01 safety check of the repo (private report).
 - `index.html`, `README.md`.
+
+## Maintenance, 2026-11-04
+
+The optimization pass preserves the course content and CSS. It fixes data loss when moving a folder to its own parent, replaces destructive directory copying/extraction with merges, resolves directory symlinks safely, and rejects unsafe archive paths and invalid simulated file sizes. Legacy local archives remain readable as data without allowing unsafe extraction or losing unrelated files. Shell redirection failures now return failure status; temporary shell state is restored after interruption. Brace expansion, recursive execution and detailed file comparisons have explicit bounds.
+
+Save checks now discard canceled or superseded asynchronous reads. A stale tab checks for newer stored progress before writing and warns on a conflict. Storage failures are visible, and quiz completion saves its XP immediately. Manual lesson navigation cancels delayed advances. Unchanged commands preserve mission hints and DOM nodes; unchanged saves skip storage writes. The command input has an accessible name, composition Enter does not submit partial input, and Shift+Tab can leave the terminal.
+
+The new maintenance suite adds 27 checks. All pass in Chromium, Firefox and WebKit. Chromium also passed 74 input/reload checks, 60 offline/privacy checks, 784 hostile-command executions, and 1,145 save assertions. Firefox also passed all 1,145 save assertions against the final app source. The complete desktop and phone playthroughs both finish 81 chapters and 390 mission commands without problems, with the expected 13,225 course XP, all 10 quests, 48 challenges and 81 quiz answers.
+
+In the repeatable maintenance workload, 2,500 unchanged validations went from 2,500 mission renders to zero; 100 identical save calls went from 100 writes to zero. Wall-clock measurements varied with host load, so these are operation-count improvements rather than an overall speed claim. The original baseline's save suite hit a browser click timeout; the fixed Chromium suite completed. Tests ran locally on Node 26.13.0 with the existing Playwright 1.58.2 pin.
+
+The save-test fixture now waits for the opening chapter transition before creating its Git history. Timer regressions freeze the clock before loading the page, avoiding a WebKit setup race. All save assertions remain in place.
+
+A WebKit navigation timeout reproduced at the 64th storage context on both baseline and fixed pages, before the app initialized. The save suite now starts fresh WebKit browsers between batches of 32 independent stored-save cases. A paired probe passed 80 baseline and 80 fixed navigations with batching; assertions and timeouts are unchanged. Case-level logs, partial-result receipts and an explicit stored-phase rerun make future failures reviewable without repeating completed import checks.
+
+Final WebKit save coverage completed in phases: 961 import assertions completed before the navigation failure, then all 185 stored-save and follow-on assertions passed with batching. WebKit exercises two storage-refusal checks where Chromium and Firefox exercise one large-save load check, accounting for the extra assertion. All 18 browser transfers passed; 175 of 179 shell comparisons matched, with only the four documented differences. The complete course runs preceded the final legacy-archive compatibility adjustment; final-source regressions and save checks verify that adjustment.

@@ -3,7 +3,8 @@ import fs from 'fs';
 import { BASE, launch } from './lib.mjs';
 
 const names = ['chromium', 'firefox', 'webkit'];
-const browsers = Object.fromEntries(await Promise.all(names.map(async n => [n, await launch(n)])));
+let browser = null;
+let engine = null;
 const results = [];
 const check = (name, ok, detail = '') => {
   results.push({ name, ok });
@@ -18,7 +19,12 @@ const read = page => page.evaluate(() => {
   return JSON.stringify(sorted(s));
 });
 async function open(name) {
-  const ctx = await browsers[name].newContext({ acceptDownloads: true, viewport: { width: 1440, height: 900 } });
+  if (engine !== name) {
+    if (browser) await browser.close();
+    browser = await launch(name);
+    engine = name;
+  }
+  const ctx = await browser.newContext({ acceptDownloads: true, viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
   await page.goto(BASE);
   await page.getByRole('button', { name: /BEGIN TRAINING/ }).click();
@@ -65,7 +71,7 @@ for (const from of names) {
     }
   }
 }
-for (const b of Object.values(browsers)) await b.close();
+if (browser) await browser.close();
 const bad = results.filter(r => !r.ok);
 console.log(`\n${results.length - bad.length}/${results.length} cross-browser moves passed`);
 process.exit(bad.length ? 1 : 0);

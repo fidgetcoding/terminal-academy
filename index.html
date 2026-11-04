@@ -485,7 +485,7 @@ body { background:var(--bg); color:var(--text); font-family:var(--font); height:
     <button id="btn-achievements" onclick="showTab('achievements')">Achievements</button>
     <button id="btn-glossary" onclick="showTab('glossary')">Encyclopedia</button>
     <button id="btn-save" onclick="showTab('save')">Save</button>
-    <button id="btn-toggle-panel" onclick="togglePanel()">◧</button>
+    <button id="btn-toggle-panel" aria-label="Toggle learning panel" aria-controls="side-panel" aria-expanded="true" onclick="togglePanel()">◧</button>
   </div>
 </div>
 
@@ -493,12 +493,12 @@ body { background:var(--bg); color:var(--text); font-family:var(--font); height:
 <div id="main">
   <!-- Terminal -->
   <div id="terminal-pane">
-    <div id="terminal"></div>
+    <div id="terminal" role="log" aria-label="Terminal output" aria-live="polite" aria-relevant="additions"></div>
     <div id="input-line">
       <span class="prompt" id="prompt">player@academy:~$ </span>
       <div class="input-wrapper">
-        <div class="syntax-overlay" id="syntax-overlay"></div>
-        <input type="text" id="cmd-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" autofocus>
+        <div class="syntax-overlay" id="syntax-overlay" aria-hidden="true"></div>
+        <input type="text" id="cmd-input" aria-label="Terminal command" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" autofocus>
       </div>
     </div>
   </div>
@@ -749,19 +749,19 @@ function resolvePath(cwd, inputPath) {
   return '/' + resolved.join('/');
 }
 
-function getNode(fs, path, _symlinkDepth) {
+function getNode(fs, path, _symlinkDepth = 0) {
   if (path === '/') return fs['/'];
   const parts = path.split('/').filter(Boolean);
   let node = fs['/'];
-  for (const p of parts) {
-    if (!node || node.type !== 'dir' || !own(node.children, p)) return null;
-    node = node.children[p];
-  }
-  // Follow symlinks with recursion guard
-  if (node && node.type === 'symlink') {
-    if ((_symlinkDepth || 0) >= 10) return null;
-    const targetPath = resolvePath(path.replace(/\/[^/]+$/, '') || '/', node.target);
-    return getNode(fs, targetPath, (_symlinkDepth || 0) + 1);
+  for (let i = 0; i < parts.length; i++) {
+    if (!node || node.type !== 'dir' || !own(node.children, parts[i])) return null;
+    node = node.children[parts[i]];
+    if (node && node.type === 'symlink') {
+      if (_symlinkDepth >= 10) return null;
+      const parentPath = '/' + parts.slice(0, i).join('/');
+      const target = resolvePath(parentPath, node.target);
+      return getNode(fs, resolvePath(target, parts.slice(i + 1).join('/') || '.'), _symlinkDepth + 1);
+    }
   }
   return node;
 }
@@ -1997,6 +1997,12 @@ let readQueue = null;    // lines "read" consumes inside a while loop
 let lastBgPid = 0;
 let noTrailingNewline = false; // set by echo -n and printf
 
+class ShellLimit extends Error {}
+let shellDepth = 0;
+let shellSteps = 0;
+const MAX_SHELL_STEPS = 10000;
+const MAX_EXPANDED_WORDS = 10000;
+
 class ShellSignal { constructor(kind, code) { this.kind = kind; this.code = code || 0; } }
 
 // If a quoted string or a (...) or ${...} group starts at i, returns the index just past it, else i.
@@ -2343,20 +2349,28 @@ function calcExpression(src, opts) {
   return result;
 }
 
-function expandBraces(w) {
+function expandBraces(w, budget = { words: 0 }, depth = 0) {
+  if (depth > 40) throw new ShellLimit('brace expansion is nested too deeply');
   const m = /^([^{]*)\{([^{}]*)\}(.*)$/s.exec(w);
-  if (!m || m[1].endsWith(LIT)) return [w];
+  const literal = () => {
+    if (++budget.words > MAX_EXPANDED_WORDS) throw new ShellLimit('brace expansion exceeds 10,000 words');
+    return [w];
+  };
+  if (!m || m[1].endsWith(LIT)) return literal();
   const seq = /^(-?\d+)\.\.(-?\d+)$/.exec(m[2]) || /^([a-zA-Z])\.\.([a-zA-Z])$/.exec(m[2]);
   let items;
   if (seq) {
-    items = [];
     const isNum = /\d/.test(seq[1]);
-    const a = isNum ? parseInt(seq[1]) : seq[1].charCodeAt(0);
-    const b = isNum ? parseInt(seq[2]) : seq[2].charCodeAt(0);
-    for (let v = a; a <= b ? v <= b : v >= b; v += a <= b ? 1 : -1) items.push(isNum ? String(v) : String.fromCharCode(v));
+    const a = isNum ? Number(seq[1]) : seq[1].charCodeAt(0);
+    const b = isNum ? Number(seq[2]) : seq[2].charCodeAt(0);
+    if (!Number.isSafeInteger(a) || !Number.isSafeInteger(b) || Math.abs(b - a) + 1 > MAX_EXPANDED_WORDS) throw new ShellLimit('brace expansion exceeds 10,000 words');
+    items = Array.from({ length: Math.abs(b - a) + 1 }, (_, i) => {
+      const value = a + i * (a <= b ? 1 : -1);
+      return isNum ? String(value) : String.fromCharCode(value);
+    });
   } else if (m[2].includes(',')) items = m[2].split(',');
-  else return [w];
-  return items.flatMap(it => expandBraces(m[1] + it + m[3]));
+  else return literal();
+  return items.flatMap(it => expandBraces(m[1] + it + m[3], budget, depth + 1));
 }
 
 // Expands one unquoted glob pattern against the virtual filesystem.
@@ -2500,8 +2514,9 @@ function processSubFile(readCmd, writeCmd) {
   // The inner command may use process substitution itself, so run it before touching /dev/fd
   const outer = processSubs;
   processSubs = [];
-  const content = readCmd !== null ? captureCommand(readCmd).replace(/\n*$/, '\n') : '';
-  processSubs = outer;
+  let content;
+  try { content = readCmd !== null ? captureCommand(readCmd).replace(/\n*$/, '\n') : ''; }
+  finally { processSubs = outer; }
   const devNode = getNode(state.fs, '/dev');
   if (!devNode.children.fd) devNode.children.fd = dir('rwxr-xr-x', {});
   const name = 63 + processSubs.length;
@@ -2515,9 +2530,12 @@ function finishProcessSubs() {
   const subs = processSubs;
   processSubs = [];
   const shown = [];
-  for (const s of subs) if (s.writeCmd) { const r = runPipeline(s.writeCmd, s.node.content); if (r) shown.push(r); }
-  const devNode = getNode(state.fs, '/dev');
-  delete devNode.children.fd;
+  try {
+    for (const s of subs) if (s.writeCmd) { const r = runPipeline(s.writeCmd, s.node.content); if (r) shown.push(r); }
+  } finally {
+    const devNode = getNode(state.fs, '/dev');
+    if (devNode) delete devNode.children.fd;
+  }
   return shown.join('\n');
 }
 
@@ -2566,6 +2584,7 @@ function runParsed(parsed, stdin) {
     state.lastExit = 0;
     let stderr = '';
     for (const r of redirs) if (r.target !== undefined && r.op !== '<' && r.op !== '<<<') stderr = writeRedirect(r.target, '', r.op.includes('>>')) || stderr; // "> file" on its own creates the file
+    if (stderr) state.lastExit = 1;
     return { stdout: '', stderr };
   }
   const toFile = redirs.some(r => r.op === '>' || r.op === '>>' || r.op === '&>' || r.op === '&>>');
@@ -2575,9 +2594,13 @@ function runParsed(parsed, stdin) {
   const saved = assigns.filter(a => a.value !== undefined && a.key === undefined).map(a => [a.name, state.envVars[a.name]]);
   assigns.forEach(assignVar);
   forcedExit = null;
-  const html = runCommand(words[0], words.slice(1), input === undefined ? null : input);
-  saved.forEach(([k, v]) => { if (v === undefined) delete state.envVars[k]; else state.envVars[k] = v; });
-  pipingOut = wasPiping;
+  let html;
+  try {
+    html = runCommand(words[0], words.slice(1), input === undefined ? null : input);
+  } finally {
+    saved.forEach(([k, v]) => { if (v === undefined) delete state.envVars[k]; else state.envVars[k] = v; });
+    pipingOut = wasPiping;
+  }
   const notFound = /class="error">Command not found/.test(html);
   const denied = /class="error">[^<]*Permission denied/.test(html) && words[0].includes('/');
   const hasErr = String(html).includes('class="error"');
@@ -2613,6 +2636,7 @@ function runParsed(parsed, stdin) {
       stderr = '';
     }
   }
+  if (errs.length) state.lastExit = 1;
   noTrailingNewline = false;
   return { stdout, stderr: [stderr, ...errs].filter(Boolean).join('\n') };
 }
@@ -2634,9 +2658,10 @@ function runStage(text, stdin) {
   if (trimmed[0] === '(' && skipGroup(trimmed, 0) === trimmed.length) {
     // Subshell: cd and variables don't leak out
     const cwd = state.cwd, env = { ...state.envVars };
-    const { out, err } = splitStreams(runList(trimmed.slice(1, -1), stdin));
-    state.cwd = cwd; state.envVars = env; updatePrompt();
-    return { stdout: out, stderr: err };
+    try {
+      const { out, err } = splitStreams(runList(trimmed.slice(1, -1), stdin));
+      return { stdout: out, stderr: err };
+    } finally { state.cwd = cwd; state.envVars = env; updatePrompt(); }
   }
   if (trimmed[0] === '{' && /\}$/.test(trimmed)) {
     const { out, err } = splitStreams(runList(trimmed.slice(1, -1).replace(/;\s*$/, ''), stdin));
@@ -2665,30 +2690,37 @@ function runPipeline(text, stdin) {
   const stages = splitPipes(text);
   const wasPiping = pipingOut;
   let data = stdin, errs = [], last = { stdout: '', stderr: '' };
-  stages.forEach((stage, i) => {
-    const isLast = i === stages.length - 1;
-    pipingOut = !isLast || wasPiping;
-    last = runStage(stage, data);
-    if (!isLast) {
-      if (last.stderr) errs.push(last.stderr);
-      data = pipeText(last.stdout);
-    }
-  });
-  pipingOut = wasPiping;
+  try {
+    stages.forEach((stage, i) => {
+      const isLast = i === stages.length - 1;
+      pipingOut = !isLast || wasPiping;
+      last = runStage(stage, data);
+      if (!isLast) {
+        if (last.stderr) errs.push(last.stderr);
+        data = pipeText(last.stdout);
+      }
+    });
+  } finally { pipingOut = wasPiping; }
   return [...errs, last.stderr, last.stdout].filter(Boolean).join('\n');
 }
 
 function runList(str, stdin) {
-  const { parts } = splitList(str);
-  const shown = [];
-  parts.forEach((part, k) => {
-    const prev = k ? parts[k - 1].sep : ';';
-    if ((prev === '&&' && state.lastExit !== 0) || (prev === '||' && state.lastExit === 0)) return;
-    if (part.sep === '&') { shown.push(startBackgroundJob(part.text)); state.lastExit = 0; return; }
-    const out = runPipeline(part.text, k === 0 ? stdin : null);
-    if (out) shown.push(out);
-  });
-  return shown.join('\n');
+  if (shellDepth >= 80) throw new ShellLimit('shell calls are nested too deeply');
+  if (shellDepth === 0) shellSteps = 0;
+  shellDepth++;
+  try {
+    const { parts } = splitList(str);
+    const shown = [];
+    parts.forEach((part, k) => {
+      if (++shellSteps > MAX_SHELL_STEPS) throw new ShellLimit('command exceeded 10,000 shell steps');
+      const prev = k ? parts[k - 1].sep : ';';
+      if ((prev === '&&' && state.lastExit !== 0) || (prev === '||' && state.lastExit === 0)) return;
+      if (part.sep === '&') { shown.push(startBackgroundJob(part.text)); state.lastExit = 0; return; }
+      const out = runPipeline(part.text, k === 0 ? stdin : null);
+      if (out) shown.push(out);
+    });
+    return shown.join('\n');
+  } finally { shellDepth--; }
 }
 
 function startBackgroundJob(text) {
@@ -2838,13 +2870,28 @@ function execCommand(raw, stdinData) {
   const text = extractHeredocs(raw.trim());
   if (!text) return '';
   pendingErrors = [];
-  let out = '';
+  let out = '', interrupted = false;
   try {
     out = runList(text, stdinData === undefined ? null : stdinData);
   } catch (e) {
-    if (!(e instanceof ShellSignal)) throw e;
-    state.lastExit = e.code;
-    if (e.kind === 'exit') out = '<span class="dim">(In a real terminal, exit closes this shell. Here you stay put.)</span>';
+    interrupted = true;
+    if (e instanceof ShellLimit) {
+      state.lastExit = 1;
+      out = `<span class="error">bash: ${escapeHtml(e.message)} (simulator limit)</span>`;
+    } else {
+      if (!(e instanceof ShellSignal)) throw e;
+      state.lastExit = e.code;
+      if (e.kind === 'exit') out = '<span class="dim">(In a real terminal, exit closes this shell. Here you stay put.)</span>';
+    }
+  } finally {
+    pipingOut = false;
+    noTrailingNewline = false;
+    readQueue = null;
+    if (interrupted && processSubs.length) {
+      processSubs = [];
+      const devNode = getNode(state.fs, '/dev');
+      if (devNode) delete devNode.children.fd;
+    }
   }
   if (processSubs.length) finishProcessSubs();
   return [...pendingErrors, out].filter(Boolean).join('\n');
@@ -4025,6 +4072,16 @@ function cmdMkdir(args) {
   return errors.join('\n');
 }
 
+// Whether a destination folder is inside a source tree, including paths reached through a symlink.
+function containsDirectory(root, target) {
+  if (root === target) return true;
+  return root.type === 'dir' && Object.values(root.children).some(child => child.type === 'dir' && containsDirectory(child, target));
+}
+
+function protectedDirectory(node) {
+  return ['/', '/home', '/home/player', '/etc', '/dev', '/usr', '/var', '/tmp'].some(path => getNode(state.fs, path) === node);
+}
+
 // --- cp ---
 function cmdCp(args) {
   const { flags, operands: paths } = parseFlags(args);
@@ -4036,19 +4093,25 @@ function cmdCp(args) {
   const sources = paths.slice(0, -1);
   if (sources.length > 1 && (!dstNode || dstNode.type !== 'dir')) return `<span class="error">cp: ${escapeHtml(dest)}: Not a directory</span>`;
   const errors = [];
+  const error = (path, message) => errors.push(`<span class="error">cp: ${escapeHtml(path)}: ${message}</span>`);
+  const copy = (source, parent, name, label) => {
+    const existing = own(parent.children, name) ? parent.children[name] : null;
+    if (source === existing) { error(label, 'source and destination are the same file'); return; }
+    if (existing && (source.type === 'dir') !== (existing.type === 'dir')) { error(label, 'cannot overwrite a file with a directory or a directory with a file'); return; }
+    if (source.type === 'dir' && existing) {
+      for (const [childName, child] of Object.entries(source.children)) copy(child, existing, childName, label + '/' + childName);
+    } else parent.children[name] = JSON.parse(JSON.stringify(source));
+  };
   for (const src of sources) {
     const srcPath = resolvePath(state.cwd, src);
     const srcNode = getNode(state.fs, srcPath);
-    if (!srcNode) { errors.push(`<span class="error">cp: ${escapeHtml(src)}: No such file or directory</span>`); continue; }
-    if (srcNode.type === 'dir' && !recursive) { errors.push(`<span class="error">cp: -r not specified; omitting directory '${escapeHtml(src)}'</span>`); continue; }
-    if (srcNode.type !== 'dir' && srcNode.permissions[0] !== 'r') { errors.push(`<span class="error">cp: ${escapeHtml(src)}: Permission denied</span>`); continue; }
-    if (dstNode && dstNode.type === 'dir') {
-      dstNode.children[srcPath.split('/').pop()] = JSON.parse(JSON.stringify(srcNode));
-    } else {
-      const { parent, name } = getParentAndName(state.fs, dstPath);
-      if (!parent || parent.type !== 'dir') { errors.push(`<span class="error">cp: ${escapeHtml(dest)}: No such file or directory</span>`); continue; }
-      parent.children[name] = JSON.parse(JSON.stringify(srcNode));
-    }
+    if (!srcNode) { error(src, 'No such file or directory'); continue; }
+    if (srcNode.type === 'dir' && !recursive) { error(src, '-r not specified; omitting directory'); continue; }
+    if (srcNode.type !== 'dir' && srcNode.permissions[0] !== 'r') { error(src, 'Permission denied'); continue; }
+    const target = dstNode?.type === 'dir' ? { parent: dstNode, name: srcPath.split('/').pop() } : getParentAndName(state.fs, dstPath);
+    if (!target.parent || target.parent.type !== 'dir' || !target.name) { error(dest, 'No such file or directory'); continue; }
+    if (srcNode.type === 'dir' && containsDirectory(srcNode, target.parent)) { error(src, 'cannot copy a directory into itself'); continue; }
+    copy(srcNode, target.parent, target.name, dest);
   }
   return errors.join('\n');
 }
@@ -4063,20 +4126,24 @@ function cmdMv(args) {
   const sources = paths.slice(0, -1);
   if (sources.length > 1 && (!dstNode || dstNode.type !== 'dir')) return `<span class="error">mv: ${escapeHtml(dest)}: Not a directory</span>`;
   const errors = [];
+  const error = (src, message) => errors.push(`<span class="error">mv: ${escapeHtml(src)}: ${message}</span>`);
   for (const src of sources) {
     const srcPath = resolvePath(state.cwd, src);
     const srcNode = linkNode(srcPath);
-    if (!srcNode) { errors.push(`<span class="error">mv: ${escapeHtml(src)}: No such file or directory</span>`); continue; }
-    if (dstPath === srcPath || dstPath.startsWith(srcPath + '/')) { errors.push(`<span class="error">mv: cannot move '${escapeHtml(src)}' into itself</span>`); continue; }
+    if (!srcNode) { error(src, 'No such file or directory'); continue; }
     const { parent: srcParent, name: srcName } = getParentAndName(state.fs, srcPath);
-    if (dstNode && dstNode.type === 'dir') {
-      dstNode.children[srcName] = srcNode;
-    } else {
-      const { parent, name } = getParentAndName(state.fs, dstPath);
-      if (!parent || parent.type !== 'dir') { errors.push(`<span class="error">mv: ${escapeHtml(dest)}: No such file or directory</span>`); continue; }
-      parent.children[name] = srcNode;
-    }
+    const target = dstNode?.type === 'dir' ? { parent: dstNode, name: srcName } : getParentAndName(state.fs, dstPath);
+    if (!srcParent || !target.parent || target.parent.type !== 'dir' || !target.name) { error(dest, 'No such file or directory'); continue; }
+    const existing = own(target.parent.children, target.name) ? target.parent.children[target.name] : null;
+    if (existing === srcNode || (srcNode.type === 'dir' && containsDirectory(srcNode, target.parent))) { error(src, 'cannot move a file or directory into itself'); continue; }
+    if (srcNode.type === 'dir' && protectedDirectory(srcNode)) { error(src, 'Permission denied (protected system path)'); continue; }
+    if (existing && (srcNode.type === 'dir') !== (existing.type === 'dir')) { error(dest, 'cannot overwrite a file with a directory or a directory with a file'); continue; }
+    if (existing?.type === 'dir' && Object.keys(existing.children).length) { error(dest, 'Directory not empty'); continue; }
+    target.parent.children[target.name] = srcNode;
     delete srcParent.children[srcName];
+    const movedPath = dstNode?.type === 'dir' ? resolvePath(dstPath, srcName) : dstPath;
+    for (const key of ['cwd', 'prevDir']) if (state[key] === srcPath || state[key].startsWith(srcPath + '/')) state[key] = movedPath + state[key].slice(srcPath.length);
+    updatePrompt();
   }
   return errors.join('\n');
 }
@@ -4095,6 +4162,10 @@ function cmdRm(args) {
       continue;
     }
     const node = linkNode(path);
+    if (node?.type === 'dir' && protectedDirectory(node)) {
+      errors.push(`<span class="error">rm: cannot remove '${escapeHtml(t)}': Permission denied (protected system path)</span>`);
+      continue;
+    }
     if (!node) {
       if (!force) errors.push(`<span class="error">rm: ${escapeHtml(t)}: No such file or directory</span>`);
       continue;
@@ -4945,6 +5016,13 @@ function cmdReadlink(args) {
   return `<span class="error">readlink: ${escapeHtml(args[0])}: not a symbolic link</span>`;
 }
 
+// Archive paths stay relative to the extraction folder and never access object prototypes.
+function archiveParts(name) {
+  if (typeof name !== 'string' || !name || name.startsWith('/') || name.includes('\0')) return null;
+  const parts = name.split('/').filter(part => part && part !== '.');
+  return parts.some(part => part === '..' || part === '__proto__' || part.length > 255) ? null : parts;
+}
+
 // --- tar ---
 function cmdTar(args) {
   if (args.length === 0) return '<span class="error">tar: must specify one of -c, -r, -t, -u, -x</span>\n<span class="dim">Usage: tar -czf archive.tar.gz files/ | tar -xzf archive.tar.gz | tar -tzf archive.tar.gz</span>';
@@ -4962,7 +5040,9 @@ function cmdTar(args) {
     for (const s of operands) {
       const node = getNode(state.fs, resolvePath(state.cwd, s));
       if (!node) return `<span class="error">tar: ${escapeHtml(s)}: No such file or directory</span>`;
-      entries.push({ name: s.replace(/^\/+/, ''), node: JSON.parse(JSON.stringify(node)) });
+      const name = s.replace(/^\/+/, '');
+      if (!archiveParts(name)) return `<span class="error">tar: ${escapeHtml(s)}: unsafe archive path</span>`;
+      entries.push({ name, node: JSON.parse(JSON.stringify(node)) });
     }
     const walk = (name, node) => {
       listing.push(node.type === 'dir' ? name.replace(/\/*$/, '/') : name);
@@ -4985,18 +5065,35 @@ function cmdTar(args) {
   const listing = node.listing || ['readme.txt'];
   if (flags.t) return escapeHtml(listing.join('\n'));
   const destDir = flags.C ? resolvePath(state.cwd, flags.C) : state.cwd;
-  if (!getNode(state.fs, destDir)) return `<span class="error">tar: ${escapeHtml(flags.C)}: No such file or directory</span>`;
-  for (const e of entries) {
-    const path = resolvePath(destDir, e.name);
-    const parts = path.split('/').filter(Boolean);
-    const leaf = parts.pop();
-    let cur = state.fs['/'];
-    for (const p of parts) {
-      if (!cur.children[p]) cur.children[p] = dir('rwxr-xr-x', {});
-      cur = cur.children[p];
+  const destination = getNode(state.fs, destDir);
+  if (!destination || destination.type !== 'dir') return `<span class="error">tar: ${escapeHtml(flags.C || destDir)}: Not a directory</span>`;
+  if (entries.some(e => !archiveParts(e.name))) return '<span class="error">tar: archive contains an unsafe path</span>';
+  const errors = [];
+  const extract = (parent, name, source) => {
+    const existing = own(parent.children, name) ? parent.children[name] : null;
+    if (existing?.type === 'symlink' || (existing && (existing.type === 'dir') !== (source.type === 'dir'))) {
+      errors.push(`<span class="error">tar: ${escapeHtml(name)}: cannot replace this entry</span>`);
+      return;
     }
-    cur.children[leaf] = JSON.parse(JSON.stringify(e.node));
+    if (source.type === 'dir' && existing) {
+      for (const [childName, child] of Object.entries(source.children)) extract(existing, childName, child);
+    } else parent.children[name] = JSON.parse(JSON.stringify(source));
+  };
+  for (const e of entries) {
+    const parts = archiveParts(e.name), leaf = parts.pop();
+    let cur = destination;
+    for (const part of parts) {
+      if (!own(cur.children, part)) cur.children[part] = dir('rwxr-xr-x', {});
+      const next = cur.children[part];
+      if (next.type !== 'dir') { cur = null; break; } // don't follow an extraction-time symlink
+      cur = next;
+    }
+    if (!cur) { errors.push(`<span class="error">tar: ${escapeHtml(e.name)}: Not a directory</span>`); continue; }
+    if (leaf) extract(cur, leaf, e.node);
+    else if (e.node.type === 'dir') for (const [name, child] of Object.entries(e.node.children)) extract(cur, name, child);
+    else errors.push('<span class="error">tar: cannot replace the extraction folder with a file</span>');
   }
+  if (errors.length) return errors.join('\n');
   const verbose = flags.v ? escapeHtml(listing.join('\n')) + '\n' : '';
   return `${verbose}<span class="dim">Extracted ${listing.length} entries. Real tar prints nothing unless you add -v.</span>`;
 }
@@ -6309,12 +6406,16 @@ function cmdDiff(args) {
   if (operands.length !== 2) return '<span class="error">diff: missing operand</span>\n<span class="dim">Usage: diff file1 file2</span>';
   const compareFiles = (nameA, nameB, labelOnChange) => {
     const fa = readFileFor('diff', nameA), fb = readFileFor('diff', nameB);
-    if (fa.error) return [fa.error];
-    if (fb.error) return [fb.error];
+    if (fa.error || fb.error) { forcedExit = 2; return [fa.error || fb.error]; }
     if (fa.content === fb.content) return [];
     forcedExit = 1;
     if (flags.q) return [`Files ${escapeHtml(nameA)} and ${escapeHtml(nameB)} differ`];
-    const ops = diffLines(toLines(fa.content), toLines(fb.content));
+    const linesA = toLines(fa.content), linesB = toLines(fb.content);
+    if ((linesA.length + 1) * (linesB.length + 1) > 2000000) {
+      forcedExit = 2;
+      return ['<span class="error">diff: files are too large for a line-by-line comparison here. Use diff -q to compare their contents.</span>'];
+    }
+    const ops = diffLines(linesA, linesB);
     const body = flags.u ? diffUnified(ops, nameA, nameB) : diffNormal(ops);
     return labelOnChange ? [`diff ${flags.r ? '-r ' : ''}${escapeHtml(nameA)} ${escapeHtml(nameB)}`, ...body] : body;
   };
@@ -6865,21 +6966,23 @@ function cmdDefaults(args) {
 function cmdDd(args) {
   if (!args[0]) return '<span class="dim">Usage: dd if=INPUT of=OUTPUT bs=BLOCKSIZE count=COUNT\ndd copies and converts data.</span>';
   const opt = name => { const a = args.find(x => x.startsWith(name + '=')); return a ? a.slice(name.length + 1) : null; };
-  const toBytes = v => { const m = /^(\d+)([kKmMgG]?)/.exec(v || ''); if (!m) return 512; return parseInt(m[1]) * ({ k:1024, K:1024, m:1048576, M:1048576, g:1073741824, G:1073741824 }[m[2]] || 1); };
+  const toBytes = v => { const m = /^(\d+)([kKmMgG]?)$/.exec(v || '512'); if (!m) return NaN; return parseInt(m[1]) * ({ k:1024, K:1024, m:1048576, M:1048576, g:1073741824, G:1073741824 }[m[2]] || 1); };
   const bs = toBytes(opt('bs'));
-  const count = parseInt(opt('count')) || 0;
+  const countArg = opt('count');
+  const count = countArg === null ? null : /^\d+$/.test(countArg) ? Number(countArg) : NaN;
+  if (!Number.isSafeInteger(bs) || bs <= 0 || (count !== null && (!Number.isSafeInteger(count) || !Number.isSafeInteger(bs * count)))) return '<span class="error">dd: invalid block size or count</span>';
   const input = opt('if'), output = opt('of');
   if (input && !['/dev/zero', '/dev/urandom'].includes(resolvePath(state.cwd, input))) {
     const f = readFileFor('dd', input);
     if (f.error) return f.error;
   }
-  if (!count) return '<span class="dim">Without count=, dd keeps going until its input runs out. Add something like count=10.</span>';
+  if (count === null) return '<span class="dim">Without count=, dd keeps going until its input runs out. Add something like count=10.</span>';
   const total = bs * count;
   if (output) {
     const e = writeRedirect(output, '', false);
     if (e) return e;
     const node = getNode(state.fs, resolvePath(state.cwd, output));
-    if (node) { node.size = total; node.content = '[binary: ' + total + ' bytes]'; }
+    if (node) { node.size = total; node.content = total === 0 ? '' : '[binary: ' + total + ' bytes]'; }
   }
   return `${count}+0 records in\n${count}+0 records out\n${total} bytes transferred in 0.001 secs`;
 }
@@ -7950,6 +8053,7 @@ function escapeHtml(str) {
 }
 
 inputEl.addEventListener('keydown', e => {
+  if (e.isComposing || e.keyCode === 229) return;
   if (e.key === 'Enter') {
     const val = inputEl.value;
     inputEl.value = '';
@@ -7972,7 +8076,7 @@ inputEl.addEventListener('keydown', e => {
   } else if (e.key === 'l' && e.ctrlKey) {
     e.preventDefault();
     terminalEl.innerHTML = '';
-  } else if (e.key === 'Tab') {
+  } else if (e.key === 'Tab' && !e.shiftKey && inputEl.value.trim()) {
     e.preventDefault();
     tabComplete();
     updateSyntaxHighlight();
@@ -8122,6 +8226,8 @@ function syncOverlayScroll() {
 // ============================================================
 // LESSON SYSTEM
 // ============================================================
+let lessonAdvanceTimer = null;
+
 function renderLesson() {
   const lesson = lessons[state.currentLesson];
   if (!lesson) return;
@@ -8221,7 +8327,9 @@ function validateTask(rawCmd, failed) {
           printToTerminal(`<span class="info">You're now a terminal master. The real terminal awaits!</span>`, 'info');
         } else if (state.currentLesson < lessons.length - 1) {
           const finishedIdx = state.currentLesson;
-          setTimeout(() => {
+          clearTimeout(lessonAdvanceTimer);
+          lessonAdvanceTimer = setTimeout(() => {
+            lessonAdvanceTimer = null;
             printToTerminal(`\n<span class="success">━━━ Chapter ${lesson.chapter} Complete! ━━━</span>`, 'success');
             if (state.currentLesson !== finishedIdx) return; // they already moved on with the buttons
             printToTerminal(`<span class="info">Moving to Chapter ${lesson.chapter + 1}...</span>\n`, 'info');
@@ -8233,10 +8341,10 @@ function validateTask(rawCmd, failed) {
           printToTerminal(`<span class="info">That's the last chapter, but ${left.length} earlier chapter${left.length === 1 ? ' is' : 's are'} unfinished: ${left.slice(0, 12).join(', ')}${left.length > 12 ? ', ...' : ''}. Use the Previous button to go back.</span>`, 'info');
         }
       }
+      renderLesson();
       break; // Only complete one task per command
     }
   }
-  renderLesson();
 }
 
 function toggleHint(idx) {
@@ -8254,6 +8362,8 @@ function returnHomeForChapter() {
 }
 
 function nextLesson() {
+  clearTimeout(lessonAdvanceTimer);
+  lessonAdvanceTimer = null;
   if (state.currentLesson < lessons.length - 1) {
     returnHomeForChapter();
     state.currentLesson++;
@@ -8269,6 +8379,8 @@ function nextLesson() {
 }
 
 function prevLesson() {
+  clearTimeout(lessonAdvanceTimer);
+  lessonAdvanceTimer = null;
   if (state.currentLesson > 0) {
     returnHomeForChapter();
     state.currentLesson--;
@@ -8277,6 +8389,7 @@ function prevLesson() {
     state.taskIndex = nextIncomplete >= 0 ? nextIncomplete : 0;
     state.lessonStartTime = Date.now();
     renderLesson();
+    saveState();
   }
 }
 
@@ -8352,9 +8465,10 @@ function updateXPBar() {
 function showTab(tab) {
   ['lessons', 'adventure', 'challenges', 'quiz', 'achievements', 'glossary', 'save'].forEach(t => {
     document.getElementById('panel-' + t).style.display = (t === tab) ? 'block' : 'none';
-    document.querySelectorAll(`.panel-tabs button[data-tab="${t}"]`).forEach(b => b.classList.toggle('active', t === tab));
+    document.querySelectorAll(`.panel-tabs button[data-tab="${t}"]`).forEach(b => { b.classList.toggle('active', t === tab); b.setAttribute('aria-pressed', String(t === tab)); });
   });
   document.querySelectorAll('.top-btns button').forEach(b => {
+    if (b.id !== 'btn-toggle-panel') b.setAttribute('aria-pressed', String(b.id === 'btn-' + tab));
     if (b.id === 'btn-' + tab) b.classList.add('active');
     else if (b.id !== 'btn-toggle-panel') b.classList.remove('active');
   });
@@ -8364,7 +8478,8 @@ function showTab(tab) {
 }
 
 function togglePanel() {
-  document.getElementById('side-panel').classList.toggle('hidden');
+  const hidden = document.getElementById('side-panel').classList.toggle('hidden');
+  document.getElementById('btn-toggle-panel').setAttribute('aria-expanded', String(!hidden));
 }
 
 // ============================================================
@@ -8387,21 +8502,45 @@ function showToast(message, type) {
 // Nothing may be saved until startGame() has loaded the player's progress. Before that, state is still
 // the blank default and saving it would overwrite a returning player's progress.
 let gameStarted = false;
+let lastStoredSave = null;
+let saveWarning = '';
+
+function warnSave(message) {
+  setSaveStatus(message, true);
+  if (saveWarning !== message) {
+    showToast(message, 'warning');
+    printToTerminal(`<span class="warning">${escapeHtml(message)}</span>`);
+  }
+  saveWarning = message;
+}
 
 function saveState() {
   if (!gameStarted) return;
   try {
-    localStorage.setItem('terminalAcademy', JSON.stringify(buildSaveObject()));
+    // An older tab must never overwrite a save written by another tab or imported there.
+    if (localStorage.getItem('terminalAcademy') !== lastStoredSave) {
+      warnSave('Progress changed in another tab. Download a save to keep this session, then reload to continue saving.');
+      return;
+    }
+    const json = JSON.stringify(buildSaveObject());
+    if (json !== lastStoredSave) {
+      localStorage.setItem('terminalAcademy', json);
+      lastStoredSave = json;
+    }
+    if (saveWarning) { setSaveStatus('Progress saved in this browser.'); saveWarning = ''; }
   } catch(e) {
-    console.warn('Could not save progress locally:', e);
+    warnSave("This browser couldn't save your progress. Download a save from the Save tab before closing this page.");
   }
 }
 
 function loadState() {
   try {
     const raw = localStorage.getItem('terminalAcademy');
+    lastStoredSave = raw;
     if (!raw) return false;
-    restoreSaveObject(checkSave(JSON.parse(raw), false).clean);
+    const { clean, problems } = checkSave(JSON.parse(raw), false);
+    restoreSaveObject(clean);
+    if (problems.length) warnSave('Some saved progress could not be restored. Download a save before continuing.');
     return true;
   } catch(e) { return false; }
 }
@@ -9070,6 +9209,8 @@ function renderQuizMenu() {
 }
 
 function startQuiz(category) {
+  clearTimeout(quizState._advanceTimer);
+  quizState._advanceTimer = null;
   quizState.active = true;
   quizState.category = category;
   quizState.score = 0;
@@ -9099,6 +9240,7 @@ function shuffle(arr) {
 }
 
 function showQuizQuestion() {
+  if (!quizState.active) return;
   const panel = document.getElementById('panel-quiz');
   if (quizState.qIndex >= quizState.pool.length) {
     // Quiz complete
@@ -9123,6 +9265,7 @@ function showQuizQuestion() {
       <button class="challenge-btn" onclick="startQuiz('${quizState.category}')" style="margin-left:8px">🔄 Retry</button>
     </div>`;
     panel.innerHTML = html;
+    saveState();
     return;
   }
 
@@ -9146,7 +9289,7 @@ function showQuizQuestion() {
 }
 
 function answerQuiz(choice) {
-  if (quizState.answered) return;
+  if (!quizState.active || quizState.answered) return;
   quizState.answered = true;
   quizState.total++;
   quizState.allTimeTotal++;
@@ -9174,7 +9317,9 @@ function answerQuiz(choice) {
   document.getElementById('quiz-explain').style.display = 'block';
 
   // Auto-advance after delay
+  saveState();
   quizState._advanceTimer = setTimeout(() => {
+    quizState._advanceTimer = null;
     quizState.qIndex++;
     showQuizQuestion();
   }, 2500);
@@ -9301,7 +9446,10 @@ function checkFsNode(node, depth, budget) {
       if (!Array.isArray(node.archive)) throw new SaveProblem('An archive is damaged.');
       out.archive = node.archive.map(e => {
         if (!isPlainRecord(e)) throw new SaveProblem('An archive is damaged.');
-        return { name: checkText(e.name, 'An archive entry', 4096), node: checkFsNode(e.node, depth + 1, budget) };
+        const name = checkText(e.name, 'An archive entry', 4096);
+        // Keep an old local archive as data; extraction still refuses its unsafe paths.
+        if (!budget.local && !archiveParts(name)) throw new SaveProblem('An archive contains an unsafe path.');
+        return { name, node: checkFsNode(e.node, depth + 1, budget) };
       });
     }
     if (node.listing !== undefined) {
@@ -9355,7 +9503,7 @@ function checkSave(raw, fromElsewhere) {
 
   attempt('fs', v => {
     if (!isPlainRecord(v)) throw new SaveProblem('Its files are damaged.');
-    const root = checkFsNode(v['/'], 0, { nodes: 0 });
+    const root = checkFsNode(v['/'], 0, { nodes: 0, local: !fromElsewhere });
     const ownDir = (node, name) => node && node.type === 'dir' && own(node.children, name) && node.children[name].type === 'dir' ? node.children[name] : null;
     if (root.type !== 'dir' || !ownDir(ownDir(root, 'home'), 'player') || !ownDir(root, 'dev')) throw new SaveProblem('Its files are missing the home folder.');
     return { '/': root };
@@ -9511,6 +9659,7 @@ function checkSave(raw, fromElsewhere) {
 const SAVE_APP = 'terminal-academy';
 const SAVE_VERSION = 1;
 let pendingImport = null;
+let importRequest = 0;
 
 function currentSaveJson() {
   const save = buildSaveObject();
@@ -9641,17 +9790,24 @@ async function readSaveText(text) {
   return clean;
 }
 
-async function checkImport(text) {
-  document.getElementById('save-confirm').style.display = 'none';
+function beginImport() {
   pendingImport = null;
+  document.getElementById('save-confirm').style.display = 'none';
+  return ++importRequest;
+}
+
+async function checkImport(text, request = beginImport()) {
+  if (request !== importRequest) return;
   let clean;
   try {
     clean = await readSaveText(text);
   } catch (e) {
+    if (request !== importRequest) return;
     if (!(e instanceof SaveProblem)) console.warn('Could not read save:', e);
     setSaveStatus(e instanceof SaveProblem ? e.message : "That save can't be loaded.", true);
     return;
   }
+  if (request !== importRequest) return;
   pendingImport = clean;
   const chapters = (clean.completedLessons || []).length;
   const quests = (clean.advCompletedQuests || []).length;
@@ -9669,13 +9825,15 @@ function loadSaveFile(input) {
   const f = input.files && input.files[0];
   input.value = '';
   if (!f) return;
+  const request = beginImport();
   if (f.size > SAVE_MAX_CHARS * 2) { setSaveStatus('It is too big to be a save.', true); return; }
-  f.text().then(checkImport, () => setSaveStatus("That file couldn't be read.", true));
+  f.text().then(text => checkImport(text, request), () => {
+    if (request === importRequest) setSaveStatus("That file couldn't be read.", true);
+  });
 }
 
 function cancelImport() {
-  pendingImport = null;
-  document.getElementById('save-confirm').style.display = 'none';
+  beginImport();
   setSaveStatus('Nothing changed.');
 }
 
@@ -9799,6 +9957,7 @@ function restoreSaveObject(save) {
 // INIT
 // ============================================================
 function startGame() {
+  if (gameStarted) return;
   document.getElementById('welcome-overlay').classList.add('hidden');
   inputEl.focus();
   state.lessonStartTime = Date.now();
@@ -9823,10 +9982,13 @@ function startGame() {
   renderQuizMenu();
   renderAchievements();
   renderGlossaryPanel();
+  showTab('lessons');
 }
 
-// Click anywhere on terminal focuses input
-document.getElementById('terminal-pane').addEventListener('click', () => inputEl.focus());
+// Let learners select output to copy without moving focus back to the input.
+document.getElementById('terminal-pane').addEventListener('click', () => {
+  if (!window.getSelection()?.toString()) inputEl.focus();
+});
 
 // A returning player goes straight back to their game; a new one sees the welcome screen first.
 let hasSave = false;

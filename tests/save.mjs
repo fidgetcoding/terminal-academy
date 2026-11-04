@@ -6,10 +6,18 @@ import http from 'http';
 import zlib from 'zlib';
 import { BASE, BROWSER, ORIGIN, launch, mobile, outFile } from './lib.mjs';
 
-const browser = await launch();
+let browser = await launch();
 const results = [];
+const storedOnly = process.argv.includes('--stored-only');
+let activeCase = 'initial fixture';
+// Keep the completed assertions and failing case if a browser operation throws mid-suite.
+process.on('uncaughtExceptionMonitor', error => {
+  fs.writeFileSync(outFile(`save-partial-${BROWSER}.json`), JSON.stringify({ activeCase, error: error.message, results }, null, 1));
+  console.error('Save case interrupted:', activeCase);
+});
 const check = (name, ok, detail = '') => {
   results.push({ name, ok, detail });
+  if (results.length % 100 === 0) console.log(`Checked ${results.length} save assertions`);
   if (!ok) console.log(`FAIL  ${name}${detail ? ' :: ' + String(detail).slice(0, 400) : ''}`);
 };
 const outbound = [];
@@ -115,8 +123,13 @@ const code0 = o => 'TA0.' + Buffer.from(typeof o === 'string' ? o : JSON.stringi
 
 // ---- A real save to start from ----
 const { ctx: goodCtx, page: goodPage } = await open();
-for (const c of ['whoami', 'hostname', 'pwd', 'mkdir -p ~/moved/deep', 'echo carried > ~/moved/deep/a.txt', 'cd ~/moved', 'export CARRY=yes', 'git init', 'git add .', 'git commit -m first', 'cd ~']) await send(goodPage, c);
+// Finish the introductory chapter before building the fixture: its delayed transition returns home.
+// Otherwise a slower browser can change directories between git init and git commit.
+for (const c of ['whoami', 'hostname', 'pwd', 'echo "Hello Terminal"']) await send(goodPage, c);
+await goodPage.locator('#panel-lessons .chapter-label', { hasText: /Chapter 2 of/i }).first().waitFor();
+for (const c of ['mkdir -p ~/moved/deep', 'echo carried > ~/moved/deep/a.txt', 'cd ~/moved', 'export CARRY=yes', 'git init', 'git add .', 'git commit -m first', 'cd ~']) await send(goodPage, c);
 const good = await goodPage.evaluate(() => JSON.parse(currentSaveJson()));
+if (!good.save.git?.commits?.length) throw new Error('Save fixture did not create its required Git commit.');
 const questId = await goodPage.evaluate(() => adventureQuests[0].id);
 await goodCtx.close();
 const clone = () => JSON.parse(JSON.stringify(good));
@@ -224,7 +237,8 @@ const refused = [
   ['a small code that unpacks to 200 MB', 'TA1.' + zlib.deflateRawSync(Buffer.alloc(200 * 1024 * 1024, 32)).toString('base64url')],
 ];
 
-for (const [name, text, only] of refused) {
+for (const [name, text, only] of (storedOnly ? [] : refused)) {
+  activeCase = `refused: ${name}`;
   for (const channel of only ? [only] : ['paste', 'file']) {
     const { ctx, page } = await open();
     await send(page, 'whoami');
@@ -304,8 +318,9 @@ const accepted = [
   ['a 2 MB file', edit(w => { homeOf(w).children.big = fileNode('x'.repeat(2000000)); })],
 ];
 
-for (const [name, text, cmds] of accepted) {
-  if (process.env.VERBOSE) console.log('loading:', name);
+for (const [name, text, cmds] of (storedOnly ? [] : accepted)) {
+  activeCase = `accepted: ${name}`;
+  console.log('Loading save case:', name);
   const { ctx: fileCtx, page: filePage } = await open();
   const viaFile = await tryImport(filePage, 'file', text);
   check(`accepted (file): ${name}`, viaFile.accepted, viaFile.status);
@@ -327,7 +342,8 @@ for (const [name, text, cmds] of accepted) {
   await ctx.close();
 }
 
-{
+if (!storedOnly) {
+  activeCase = 'imported command definitions';
   const { ctx, page } = await open();
   await tryImport(page, 'paste', accepted.find(a => a[0] === 'aliases and functions')[1]);
   await confirmLoad(page);
@@ -340,6 +356,11 @@ for (const [name, text, cmds] of accepted) {
   await ctx.close();
 }
 
+if (!storedOnly) {
+  console.log(`Completed ${results.length} save import assertions`);
+  fs.writeFileSync(outFile(`save-imports-${BROWSER}.json`), JSON.stringify(results, null, 1));
+}
+
 // ---- The same saves, already sitting in browser storage (another page on this origin could have put them there) ----
 const storedSaves = [
   ...[...refused, ...accepted].filter(([, text, only]) => only !== 'file').map(([name, text, third]) => {
@@ -349,14 +370,26 @@ const storedSaves = [
   }),
   ['aliases that hold HTML', JSON.stringify({ ...good.save, aliases: { [H]: H, ok: H }, functions: { [H]: H, fn: H } }), ['ok', 'fn', 'type ok']],
 ];
+let storedCount = 0;
 for (const [name, raw, cmds] of storedSaves) {
   if (raw.length > 5000000) continue; // browsers won't store this much
+  // WebKit stopped navigating at the 64th storage context in both baseline and fixed-page probes.
+  // Every case is independent; restart between bounded batches while keeping all assertions.
+  if (BROWSER === 'webkit' && storedCount % 32 === 0) {
+    await browser.close();
+    browser = await launch();
+    console.log('Fresh WebKit storage batch:', Math.floor(storedCount / 32) + 1);
+  }
+  storedCount++;
+  activeCase = `stored: ${name}`;
+  console.log('Loading stored save case:', name);
   const { ctx, page } = await open({ storage: raw });
   const problems = await playAndScan(page, cmds);
   check(`in browser storage: ${name}`, problems.length === 0, problems.join(' | '));
   await ctx.close();
 }
 
+activeCase = 'round trips, storage failures, layout and browser security';
 // ---- A real round trip ----
 async function playSome(page) {
   for (const c of ['whoami', 'hostname', 'pwd', 'echo "Hello Terminal"']) await send(page, c);
@@ -552,6 +585,6 @@ check('nothing was sent anywhere during this whole run', outbound.length === 0, 
 
 await browser.close();
 const bad = results.filter(r => !r.ok);
-console.log(`\n${results.length - bad.length}/${results.length} save checks passed on ${BROWSER} (${refused.length} saves refused, ${accepted.length} loaded and played, ${storedSaves.length} already in storage)`);
-fs.writeFileSync(outFile(`save-results-${BROWSER}.json`), JSON.stringify(results, null, 1));
+console.log(`\n${results.length - bad.length}/${results.length} ${storedOnly ? 'stored-save and round-trip' : 'save'} checks passed on ${BROWSER} (${storedOnly ? 0 : refused.length} saves refused, ${storedOnly ? 0 : accepted.length} loaded and played, ${storedSaves.length} already in storage)`);
+fs.writeFileSync(outFile(`save-results-${BROWSER}${storedOnly ? '-stored' : ''}.json`), JSON.stringify(results, null, 1));
 process.exit(bad.length ? 1 : 0);

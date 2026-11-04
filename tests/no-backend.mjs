@@ -241,6 +241,7 @@ for (const [name, prop, value] of [['Global Privacy Control', 'globalPrivacyCont
 
 // 10. The collector blocked, failing, or hanging: the game doesn't notice
 for (const down of ['abort', '500', 'hang']) {
+  console.log(`Testing collector failure: ${down}`);
   const ctx = await browser.newContext();
   await asLive(ctx, { down });
   const page = await ctx.newPage();
