@@ -37,8 +37,8 @@ No account, no email, no password. Stuck? Three commands get you out of most hol
 - **48 challenges** across easy, medium, hard and expert.
 - **A quiz and a glossary.** Quiz yourself, or look up what on earth `stderr` means.
 - **XP, levels and 37 achievements**, because apparently that's what it takes.
-- **A pretend computer that behaves.** Files are real files in the game. `grep` finds what's actually there, `chmod` actually locks and unlocks things, and `git status` follows what you did.
-- **Saves you can move.** Your progress lives in your browser. To keep playing on another device, open the Save tab, take a save file or a save code, and load it there. Your save is never uploaded.
+- **A pretend computer that behaves.** Files are real files in the game. `grep` finds what's actually there, `chmod` actually locks a file and opens it back up, and `git status` follows what you did.
+- **Saves you can move.** Your progress lives in your browser. To keep playing on another device, open the Save tab, take a save file or a save code, and load it there. Your save is never uploaded. Got the game open in two tabs? The stale one checks for newer progress before it saves, and warns you instead of writing over it.
 
 Commands are simulated, so `rm -rf /` just gets you a stern refusal. In a real terminal, please don't. The lessons on the truly dangerous stuff tell you what to watch for.
 
@@ -69,7 +69,7 @@ Then open <http://localhost:8000>. Pushing to `main` deploys to GitHub Pages. Go
 
 ## How I test it
 
-Every push plays the whole game in Chromium, Firefox and WebKit, at desktop and phone size: 390 mission commands, every quest, all 48 challenges and every quiz question. It also runs 784 hostile commands and over 1,100 save checks to prove nothing typed or loaded can run as code, moves saves between browsers, checks every usage count against the list above, and compares 179 commands against a real bash on macOS. 175 match. Test runs never send real counts.
+Every push plays the whole game in Chromium, Firefox and WebKit, at desktop and phone size: 390 mission commands, every quest, all 48 challenges and every quiz question. It also runs 27 checks on the newest fixes, plus 784 hostile commands and over 1,100 save checks to prove nothing typed or loaded can run as code, moves saves between browsers, checks every usage count against the list above, and compares 179 commands against a real bash on macOS. 175 match. Test runs never send real counts.
 
 To rerun it on Node 22:
 
@@ -78,21 +78,21 @@ cd tests && npm ci && npx playwright install chromium firefox webkit
 node run-all.mjs --browser firefox
 ```
 
-From the repository root, run a focused check of filesystem safety, save races, progression timers and keyboard behavior:
+For a quick check of just the newest safety work (file moves, saves racing each other, lesson timers and the keyboard), run this from the repository root:
 
 ```bash
 node tests/run-all.mjs --suite maintenance
 ```
 
-The full runner includes these checks. It starts an isolated localhost server and prints its address; test traffic never sends real usage counts.
+The full runner includes those checks too. It starts its own localhost server and prints the address, and test traffic never sends real usage counts.
 
-To rerun the stored-save and round-trip phase after a save-suite failure:
+If the save suite stops partway, you can rerun just the stored-save and round-trip part:
 
 ```bash
 node tests/run-all.mjs --browser webkit --suite save --stored-only
 ```
 
-This runs the remaining phase explicitly; use the full save suite for import coverage. Save tests retain completed assertions and the active case in `tests/out/` if a browser operation throws. WebKit uses fresh browsers between batches of 32 stored saves; the isolated navigation probe stopped at context 64 on both baseline and fixed code.
+That skips the import checks, so run the full save suite when you need those. When a browser step fails, the save tests keep what already passed, plus the case that was running, in `tests/out/`. WebKit gets a fresh browser every 32 stored saves, because in a separate probe it stalled at the 64th storage context on both the old code and the new.
 
 ## License
 

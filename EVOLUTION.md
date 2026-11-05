@@ -2,7 +2,7 @@
 
 ## Short version
 
-Terminal Academy went from nothing to 81 chapters in two days in March 2026. A swarm audit fixed 30+ bugs in April, and for months it looked done. On 2026-11-01 a robot played the entire game, the first full scripted playthrough on record. It hit 606 problems in the first run. Same day, ten commits later, the same robot finished 390 commands with 0 problems, at desktop and phone size, and the dead login was gone. Later that day saves learned to move between devices, the tests moved into the repo and CI, Firefox joined, and the game started counting anonymous usage.
+Terminal Academy went from nothing to 81 chapters in two days in March 2026. A swarm audit fixed 30+ bugs in April, and for months it looked done. On 2026-11-01 a robot played the entire game, the first full scripted playthrough on record. It hit 606 problems in the first run. Same day, ten commits later, the same robot finished 390 commands with 0 problems, at desktop and phone size, and the dead login was gone. Later that day saves learned to move between devices, the tests moved into the repo and CI, Firefox joined, and the game started counting anonymous usage. On 2026-11-04 I went after the quieter ways to lose your work: a stale second tab, a folder moved onto its own parent, an archive with sneaky paths. 27 new checks cover them, and they pass in all three browsers.
 
 ## Origin, in my words
 
@@ -38,6 +38,9 @@ It's for "anyone who has never used a terminal before, or anyone who has but sti
 | 2026-11-01 | `fa358df` | Test suites ship in the repo, with a CI job |
 | 2026-11-01 | `87e35f6` | Anonymous usage counts, and the page says exactly what is counted |
 | 2026-11-01 | `9ef4ad3` | Tests hold counts to one host and fixed shapes, and stay silent |
+| 2026-11-02 | `42bbcd1` | README, ESSENCE, EVOLUTION, AGENTS and banner published |
+| 2026-11-02 | `2dfc673` | A reload that cuts off a usage count mid-send no longer fails a test playthrough |
+| 2026-11-04 | `78efd6c` | Progress protected, terminal simulation bounded, 27 new checks. CI green, then live |
 
 ## Round by round
 
@@ -50,6 +53,34 @@ It's for "anyone who has never used a terminal before, or anyone who has but sti
 **Round 4: clear the safety list (11-01).** A safety check found the login page loading an unpinned script for a backend that no longer resolved, and typed commands able to run as HTML. Pasting a booby-trapped `su` command ran script, and saved values replayed it on every reload. Four more commits fixed all of it, and the full playthrough got rerun on the result.
 
 **Round 5: finish the list (11-01).** Saves went portable, with 89 hostile saves refused in testing. The scripts went into the repo so every number here can be rerun, and CI runs them in Chromium, Firefox and WebKit on every push. Then usage counts, so I can see whether anyone finishes. A deliberately leaking copy of the page failed 4 no-backend checks, so those checks do catch a leak. On 2026-11-02 one real count from the live page reached PostHog with a 200.
+
+**Round 6: protect the progress (11-04).**
+
+- **Built, files:** moving a folder onto its own parent used to delete files, and now it doesn't. Copying or extracting over a folder merges instead of wiping it. Directory symlinks resolve safely, aliases can't make a folder loop into itself, and protected folders can't be removed. Archives with unsafe paths get refused, and so do impossible file sizes. Old local archives still load, as plain data.
+- **Built, shell:** a redirect that fails now fails the command, and an interrupted command puts the shell back how it was. Brace expansion, recursive commands and detailed file comparisons got hard limits.
+- **Built, saves:** a stale tab checks for newer saved progress before it writes, and warns you about the conflict. A slow save load that got canceled or replaced can't land late. Storage failures show up on screen, and finishing a quiz saves its XP right away instead of waiting for the next autosave.
+- **Built, input:** jumping to a lesson by hand cancels any pending auto-advance. The command box has an accessible name, pressing Enter while composing characters (typing Japanese, say) doesn't submit half a word, and Shift+Tab gets you out of the terminal.
+- **Tested:** the release CI on `78efd6c` passed all five jobs. In each of Chromium, Firefox and WebKit: the new 27-check maintenance suite, 74 input checks, 60 no-backend checks, 784 hostile commands, 1,145 save checks (1,146 on WebKit), and full desktop and phone playthroughs at 390 of 390 commands and 13,225 XP. Plus 18 of 18 browser transfers and 175 of 179 bash matches. After it went live, 17 of 17 checks against the live site passed.
+- **Broke:** WebKit timed out on navigation at the 64th storage context, on the old code and the new alike, before the game had even started. So that one was the test setup. The save tests now start a fresh WebKit browser every 32 stored saves, and a paired probe passed 80 navigations on each version that way. The save fixture also had to wait for the opening chapter before building its Git history, and the timer tests now freeze the clock before the page loads, which dodges a WebKit setup race. In release CI, the macOS job got canceled the first time because no runner picked it up. The rerun passed.
+- **Fixed, and counted:** 2,500 unchanged checks of the same command used to redraw the mission 2,500 times. Now they redraw it zero times. 100 identical saves used to write to storage 100 times. Now they write zero. Wall-clock times bounced around with machine load, so these are counts of work skipped, not a claim that the whole game got faster.
+- **Wanted next:** nothing left on the list. Testing on physical phones, instead of phone-sized browser windows, is the gap I know about.
+
+## Feature family tree
+
+```
+"learn by doing" → one HTML file with a pretend computer inside
+├─ 18 chapters → 35 → 81, plus quiz, glossary, XP and achievements
+├─ Adventure mode → 10-quest detective story → 48 challenges
+├─ login + cloud saves → backend died → guest play only
+│  └─ saves in the browser → save files and codes → every save treated as hostile
+│     └─ stale-tab warnings, saves that can't land late
+├─ a robot plays the whole game → 606 problems → real shell parser, tools on real data
+│  ├─ hostile-input tests → typed commands can't run as HTML
+│  ├─ real bash comparison → 175 of 179 match
+│  └─ tests in the repo → CI in three browsers on every push
+├─ anonymous usage counts → no-backend checks hold them to one host
+└─ bounded commands, safe file moves, 27 maintenance checks
+```
 
 ## Bug log, 2026-11-01
 
@@ -95,6 +126,8 @@ The 606 includes a lot of knock-on damage, since one lost save wrecks everything
 - **Hostile input:** 206 commands, 784 runs through the terminal, 0 problems at the final commit. Before the fix, the same test found 57 problems, 13 of them script actually running.
 - **Saves:** over 1,100 checks on each engine, 18 of 18 moves between browsers.
 - **Browsers:** Chromium, Firefox and WebKit engines, on every push.
+- **Release, 2026-11-04:** CI at `78efd6c` green on all five jobs, with 27 of 27 maintenance checks in each browser. Local runs before the push used Node 26.13.0 and Node 22.22.2 with the pinned Playwright 1.58.2. After the deploy, 17 of 17 checks against the live site passed at desktop and phone size.
+- **Work skipped, 2026-11-04:** 2,500 unchanged command checks went from 2,500 mission redraws to 0. 100 identical saves went from 100 storage writes to 0.
 
 ## Roads not taken
 
@@ -104,23 +137,8 @@ The 606 includes a lot of knock-on damage, since one lost save wrecks everything
 
 ## Sources
 
-- Git log of `fidgetcoding/terminal-academy`, including today's ten commits, through `1d89989`.
+- Git log of `fidgetcoding/terminal-academy`, through `78efd6c`.
 - Test output: the scripts in `tests/`, run by `.github/workflows/tests.yml`.
 - 2026-11-01 safety check of the repo (private report).
+- 2026-11-04 release record for `78efd6c` (private report), and [CI run 41858671002](https://github.com/fidgetcoding/terminal-academy/actions/runs/41858671002).
 - `index.html`, `README.md`.
-
-## Maintenance, 2026-11-04
-
-The optimization pass preserves the course content and CSS. It fixes data loss when moving a folder to its own parent, replaces destructive directory copying/extraction with merges, resolves directory symlinks safely, and rejects unsafe archive paths and invalid simulated file sizes. Legacy local archives remain readable as data without allowing unsafe extraction or losing unrelated files. Shell redirection failures now return failure status; temporary shell state is restored after interruption. Brace expansion, recursive execution and detailed file comparisons have explicit bounds.
-
-Save checks now discard canceled or superseded asynchronous reads. A stale tab checks for newer stored progress before writing and warns on a conflict. Storage failures are visible, and quiz completion saves its XP immediately. Manual lesson navigation cancels delayed advances. Unchanged commands preserve mission hints and DOM nodes; unchanged saves skip storage writes. The command input has an accessible name, composition Enter does not submit partial input, and Shift+Tab can leave the terminal.
-
-The new maintenance suite adds 27 checks. All pass in Chromium, Firefox and WebKit. Chromium also passed 74 input/reload checks, 60 offline/privacy checks, 784 hostile-command executions, and 1,145 save assertions. Firefox also passed all 1,145 save assertions against the final app source. The complete desktop and phone playthroughs both finish 81 chapters and 390 mission commands without problems, with the expected 13,225 course XP, all 10 quests, 48 challenges and 81 quiz answers.
-
-In the repeatable maintenance workload, 2,500 unchanged validations went from 2,500 mission renders to zero; 100 identical save calls went from 100 writes to zero. Wall-clock measurements varied with host load, so these are operation-count improvements rather than an overall speed claim. The original baseline's save suite hit a browser click timeout; the fixed Chromium suite completed. Tests ran locally on Node 26.13.0 with the existing Playwright 1.58.2 pin.
-
-The save-test fixture now waits for the opening chapter transition before creating its Git history. Timer regressions freeze the clock before loading the page, avoiding a WebKit setup race. All save assertions remain in place.
-
-A WebKit navigation timeout reproduced at the 64th storage context on both baseline and fixed pages, before the app initialized. The save suite now starts fresh WebKit browsers between batches of 32 independent stored-save cases. A paired probe passed 80 baseline and 80 fixed navigations with batching; assertions and timeouts are unchanged. Case-level logs, partial-result receipts and an explicit stored-phase rerun make future failures reviewable without repeating completed import checks.
-
-Final WebKit save coverage completed in phases: 961 import assertions completed before the navigation failure, then all 185 stored-save and follow-on assertions passed with batching. WebKit exercises two storage-refusal checks where Chromium and Firefox exercise one large-save load check, accounting for the extra assertion. All 18 browser transfers passed; 175 of 179 shell comparisons matched, with only the four documented differences. The complete course runs preceded the final legacy-archive compatibility adjustment; final-source regressions and save checks verify that adjustment.

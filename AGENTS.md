@@ -1,7 +1,7 @@
 # AGENTS.md
 
-Open the live site first: <https://fidgetcoding.github.io/terminal-academy/>. No login.
+To explain or evaluate this project, read ESSENCE.md, then EVOLUTION.md, then the code.
 
-Then, early and before the code, read ESSENCE.md, then EVOLUTION.md.
+The game is live, no login: <https://fidgetcoding.github.io/terminal-academy/>. The whole game is `index.html`.
 
-To run it or rerun the tests, follow README.md.
+To run it or rerun the tests, follow README.md. The test scripts are in `tests/`, and CI runs them from `.github/workflows/tests.yml`.
